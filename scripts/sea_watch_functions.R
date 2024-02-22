@@ -21,3 +21,28 @@ envar_clean <- function(varname) {
   return(output)
 }
 
+
+
+
+explore_model <- function(model) { #species = NULL, data) {
+  
+  try(dev.off(dev.list()["RStudioGD"]), silent = TRUE)
+  
+  # if(!is.null(species)) {
+  #   dat <- data %>% 
+  #     filter(group.code == paste(species))
+  # } else {
+  #   dat <- data
+  # }
+  
+  
+  qqnorm(resid(model))
+  qqline(resid(model))
+  
+  
+  print(plot(model))
+  
+  
+  summary(model)
+  
+}

@@ -959,7 +959,7 @@ envar2022 <- fulldata2022 %>%
   rename(total.obs.mins = minutes.of.observation,
          wind.dir.speed = `general.wind.dir/velocity`,
          time.of.obs = `time(s).of.observation`) %>% 
-  mutate(date = str_remove(date, "X"),                  # Fixing formating issues and messy values
+  mutate(date = str_remove(date, "X"),                  # Fixing formatting issues and messy values
          date = str_replace_all(date, "\\.", "-"),
          # date =  ifelse(date == "10-16-12", "10-16-21", date),
          date = mdy(date),
@@ -1045,6 +1045,140 @@ cleaned_data2022 <- left_join(bird_data2022, envar2022, by = "date")
 
 ## Export the cleaned years data
 # write.csv(cleaned_data2022, "data/yearly_cleaned_data/sea_watch_2022_data.csv", row.names = F)
+
+
+
+
+#------------------------------------------------#
+####                  2023                    ####
+#------------------------------------------------#
+
+### Environmental Variables
+## Read in and format data for env. variable function
+fulldata2023 <- tibble(read.csv("data/SeaWatch_2023_data.csv")) %>%
+  select(-X) %>% 
+  filter(Date != "")
+
+
+## Filter to the env. variables from the full data and clean
+envar2023 <- fulldata2023 %>% 
+  filter(row_number() <= which(Date == "Visibility (miles)")) %>% 
+  mutate_all(as.character) %>% 
+  rename(var = Date) %>% 
+  pivot_longer(2:length(.),
+               names_to = "date",
+               values_to = "stat") %>%                  # Pivot longer to get dates in a column
+  mutate(var = tolower(var),
+         var = str_replace_all(var, " ", ".")) %>% 
+  pivot_wider(names_from = var, values_from = stat) %>% # Pivot wider to get env. vars as columns
+  rename(total.obs.mins = minutes.of.observation,
+         wind.dir.speed = `general.wind.dir/velocity`,
+         time.of.obs = `time(s).of.observation`,
+         visibility = `visibility.(miles)`) %>% 
+  mutate(date = str_remove(date, "X"),                  # Fixing formatting issues and messy values
+         date = str_replace_all(date, "\\.", "-"),
+         date =  ifelse(date == "2026-11-22", "2023-11-22", date),
+         date = mdy(date),
+         total.obs.mins = ifelse(is.na(total.obs.mins), "0", total.obs.mins),
+         total.obs.mins = ifelse(total.obs.mins == "No Coverage", "0", total.obs.mins),
+         total.obs.mins = ifelse(total.obs.mins == "No Count", "0", total.obs.mins),
+         total.obs.mins = ifelse(total.obs.mins  == "", "0", total.obs.mins),
+         total.obs.mins = as.integer(total.obs.mins),
+         total.obs.mins = ifelse(is.na(total.obs.mins), 0, total.obs.mins),
+         time.of.obs = ifelse(time.of.obs == "", NA_character_, time.of.obs),
+         time.of.obs = ifelse(time.of.obs == "No Count", NA_character_, time.of.obs),
+         principle.observer = ifelse(principle.observer == "", NA_character_, principle.observer),
+         wind.dir.speed = ifelse(wind.dir.speed == "", NA_character_, wind.dir.speed),
+         visibility = ifelse(visibility == "", NA_character_, visibility),
+         visibility = ifelse(visibility == "No Count", NA_character_, visibility),
+         visibility = ifelse(visibility == "No Counts", NA_character_, visibility))
+
+
+## Checking for errors in env. variables data
+## Observation minutes
+envar2022 %>% 
+  distinct(total.obs.mins) %>% 
+  print(n = nrow(.))
+
+## Date
+envar2022 %>% 
+  select(date) %>% 
+  group_by(date) %>% 
+  count(.) %>% 
+  arrange(n) %>% 
+  print(n = nrow(.))
+
+
+
+#------------------------------------------------#
+
+### Bird count data
+## Now deal with the birds count data
+bird_data2023 <- fulldata2023 %>% 
+  filter(row_number() > which(Date == "Visibility (miles)")) %>% 
+  filter(row_number() < which(Date == "Total")) %>%
+  rename(species = Date) %>% 
+  mutate_all(as.character) %>% 
+  pivot_longer(2:length(.),
+               names_to = "date",
+               values_to = "day.total") %>% 
+  mutate(date = str_remove(date, "X"),
+         date = str_replace_all(date, "\\.", "-"),
+         date = mdy(date),
+         day.total = as.integer(day.total),
+         day.total = ifelse(is.na(day.total), 0, day.total),
+         species = ifelse(species == "CO sp.", "Cormorant sp.", species),
+         species = ifelse(species == "LO sp.", "Loon sp.", species),
+         species = ifelse(species == "Great Shearwater", "GRSH", species),
+         species = ifelse(species == "UNBI", "Bird sp.", species),
+         species = ifelse(species == "SC sp.", "Scoter sp.", species),
+         species = ifelse(species == "Duck/Alcid/Loon sp.", "Bird sp.", species),
+         species = ifelse(species == "Dunlin", "DUNL", species),
+         species = ifelse(species == "Osprey", "OSPR", species),
+         species = ifelse(species == "WW Gull", "ICGU/GLGU", species)) %>% 
+  arrange(date, species)
+
+
+## Checking for errors in the bird data
+## Date
+bird_data2023 %>% 
+  select(date) %>% 
+  group_by(date) %>% 
+  count(.) %>% 
+  arrange(n) %>% 
+  print(n = nrow(.))
+
+## Species
+bird_data2023 %>% 
+  select(species) %>% 
+  group_by(species) %>% 
+  count(.) %>% 
+  arrange(n) %>% 
+  print(n = nrow(.))
+
+## Day totals
+bird_data2023 %>% 
+  distinct(day.total) %>%
+  arrange(day.total) %>% 
+  print(n = nrow(.))
+
+
+## Combine the cleaned bird count data with the cleaned env. variables
+cleaned_data2023 <- left_join(bird_data2023, envar2023, by = "date") %>% 
+  mutate(year = as.character(year(date)),
+         obs.hours = total.obs.mins/60,
+         count.p.hour = day.total/obs.hours,
+         principle.observer = ifelse(principle.observer == "SB/BG", "BG/SB", principle.observer),
+         principle.observer = ifelse(principle.observer == "ND, BG", "ND/BG", principle.observer),
+         principle.observer = ifelse(principle.observer == "ND, SB", "ND/SB", principle.observer),
+         principle.observer = ifelse(principle.observer == "SB, BG, ZK", "SB/BG/ZK", principle.observer),
+         principle.observer = ifelse(principle.observer == "SB/ND", "ND/SB", principle.observer)) %>% 
+  select(species, date, year, time.of.obs, total.obs.mins, obs.hours, 
+         day.total, count.p.hour, wind.dir.speed, visibility, principle.observer)
+
+
+## Export the cleaned years data
+# write.csv(cleaned_data2023, "data/yearly_cleaned_data/sea_watch_2023_data.csv", row.names = F)
 
 
 
