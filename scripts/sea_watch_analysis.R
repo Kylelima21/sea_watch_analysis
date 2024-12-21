@@ -23,8 +23,9 @@ swdat <- tibble(read.csv("data/sea_watch_cleaned_data_20240118.csv")) %>%
   select(-c(time.of.obs, start.time.2, wind.dir.speed, visibility)) %>% 
   rename(observer = principle.observer) %>% 
   mutate(date = as.Date(date, format = "%m/%d/%y"),
-         start.time = paste(date, start.time),
-         start.time = ymd_hm(start.time),
+         start.datetime = paste(date, start.time),
+         start.datetime = gsub("\\d*\\-\\d*\\-\\d*\\s\\NA", "NA", start.datetime),
+         start.datetime = ymd_hm(start.datetime),
          observer = ifelse(observer == "SB/ZK", "SB/RZK", observer),
          observer = ifelse(observer == "RZK/SB", "SB/RZK", observer),
          observer = ifelse(observer == "STB/RZK", "SB/RZK", observer),
