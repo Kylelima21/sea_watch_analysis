@@ -90,25 +90,26 @@ distribution_test <- function(group) {
   
   ## Create distribution model comparison on a global model
   ## Testing Poisson, Negative Binomial, and a Zero-inflated Negative Binomial
-  poissont <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy^2) +
-                      scale(pressure) + scale(wind.speed) + cos(wind.dir) + 
-                      sin(wind.dir) + (1 | observer) + (1 | obs.hours), 
-                      data = birddat, family = poisson)
-  nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy^2) +
-                     scale(pressure) + scale(wind.speed) + cos(wind.dir) + 
-                     sin(wind.dir) + (1 | observer) + (1 | obs.hours),
-                     data = birddat, family = nbinom2)
-  zi.nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy^2) +
-                        scale(pressure) + scale(wind.speed) + cos(wind.dir) + 
-                        sin(wind.dir) + (1 | observer) + (1 | obs.hours),
-                        data = birddat, family = nbinom2, ziformula = ~1)
+  poissont <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) +
+                        scale(doy^2) + scale(pressure) + scale(wind.speed) + 
+                        cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
+                        (1 | observer), data = birddat, family = poisson)
+  nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                       scale(doy^2) + scale(pressure) + scale(wind.speed) + 
+                       cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
+                       (1 | observer), data = birddat, family = nbinom2)
+  zi.nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) +
+                          scale(doy^2) + scale(pressure) + scale(wind.speed) + 
+                          cos(wind.dir) + sin(wind.dir) + scale(obs.hours) +
+                          (1 | observer), data = birddat, family = nbinom2, 
+                        ziformula = ~1)
   
   ## Define list of models
   models <- list(poissont, nbinomt, zi.nbinomt)
-  
+
   ## Specify model names
   mod.names <- c('poisson', 'nbinom', 'nbinom+zi')
-  
+
   ## Calculate AIC of each model
   aictab(cand.set = models, modnames = mod.names)
   
@@ -132,24 +133,25 @@ model_tests <- function(group, distrib) {
   
   ## Specify best fit distribution from distribution_test
   if (paste(distrib) == "poisson") {
-    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy^2) +
-                       scale(pressure) + scale(wind.speed) + cos(wind.dir) + 
-                       sin(wind.dir) + (1 | observer) + (1 | obs.hours), 
-                       data = birddat, family = poisson)
+    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                         scale(doy^2) + scale(pressure) + scale(wind.speed) + 
+                         cos(wind.dir) + sin(wind.dir) + (1 | observer) + 
+                         (1 | obs.hours), data = birddat, family = poisson)
   }
   
   if (paste(distrib) == "nbinom") {
-    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy^2) +
-                       scale(pressure) + scale(wind.speed) + cos(wind.dir) + 
-                       sin(wind.dir) + (1 | observer) + (1 | obs.hours),
-                       data = birddat, family = nbinom2)
+    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                         scale(doy^2) + scale(pressure) + scale(wind.speed) + 
+                         cos(wind.dir) + sin(wind.dir) + (1 | observer) + 
+                         (1 | obs.hours), data = birddat, family = nbinom2)
   }
   
   if (paste(distrib) == "nbinom+zi") {
-    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy^2) +
-                       scale(pressure) + scale(wind.speed) + cos(wind.dir) + 
-                       sin(wind.dir) + (1 | observer) + (1 | obs.hours),
-                       data = birddat, family = nbinom2, ziformula = ~1)
+    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                         scale(doy^2) + scale(pressure) + scale(wind.speed) + 
+                         cos(wind.dir) + sin(wind.dir) + (1 | observer) + 
+                         (1 | obs.hours), data = birddat, family = nbinom2, 
+                       ziformula = ~1)
   }
   
   
@@ -188,8 +190,9 @@ run_count_models <- function(group, distrib) {
                     family = poisson)
     year <- glmmTMB(count ~ scale(year) + (1 | observer) + (1 | obs.hours), 
                     data = birddat, family = poisson)
-    yeardoy <- glmmTMB(count ~ scale(year) + scale(doy) + (1 | observer) + 
-                      (1 | obs.hours), data = birddat, family = poisson)
+    yeardoy <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                         (1 | observer) + (1 | obs.hours), data = birddat, 
+                       family = poisson)
     yeartime <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer) + 
                        (1 | obs.hours), data = birddat, family = poisson)
     yearwindsp <- glmmTMB(count ~ scale(year) + scale(wind.speed) + 
@@ -200,20 +203,21 @@ run_count_models <- function(group, distrib) {
                          family = poisson)
     yearpressure <- glmmTMB(count ~ scale(year) + scale(pressure) + (1 | observer) + 
                            (1 | obs.hours), data = birddat, family = poisson)
-    yeardwind <- glmmTMB(count ~ scale(year) + scale(doy) + scale(wind.speed) + 
-                           (1 | observer) + (1 | obs.hours), data = birddat, 
-                         family = poisson)
-    nowinddr <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                        scale(wind.speed) + scale(pressure) + (1 | observer) + 
-                       (1 | obs.hours), data = birddat, family = poisson)
-    nowindsp <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                        cos(wind.dir) + sin(wind.dir) + scale(pressure) + 
-                       (1 | observer) + (1 | obs.hours), data = birddat, 
+    yeardwind <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                           scale(wind.speed) + (1 | observer) + (1 | obs.hours), 
+                         data = birddat, family = poisson)
+    nowinddr <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                          scale(tsm) + scale(wind.speed) + scale(pressure) + 
+                          (1 | observer) + (1 | obs.hours), data = birddat, 
                         family = poisson)
-    global <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                      scale(wind.speed) + cos(wind.dir) + sin(wind.dir) + 
-                      scale(pressure) + (1 | observer) + (1 | obs.hours), 
-                      data = birddat, family = poisson)
+    nowindsp <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) +
+                          scale(tsm) + cos(wind.dir) + sin(wind.dir) + 
+                          scale(pressure) + (1 | observer) + (1 | obs.hours), 
+                        data = birddat, family = poisson)
+    global <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) +
+                        scale(tsm) + scale(wind.speed) + cos(wind.dir) + 
+                        sin(wind.dir) + scale(pressure) + (1 | observer) + 
+                        (1 | obs.hours), data = birddat, family = poisson)
   }
   
   if (paste(distrib) == "nbinom") {
@@ -221,8 +225,9 @@ run_count_models <- function(group, distrib) {
                     family = nbinom2)
     year <- glmmTMB(count ~ scale(year) + (1 | observer) + (1 | obs.hours), 
                     data = birddat, family = nbinom2)
-    yeardoy <- glmmTMB(count ~ scale(year) + scale(doy) + (1 | observer) + 
-                         (1 | obs.hours), data = birddat, family = nbinom2)
+    yeardoy <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                         (1 | observer) + (1 | obs.hours), data = birddat, 
+                       family = nbinom2)
     yeartime <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer) + 
                           (1 | obs.hours), data = birddat, family = nbinom2)
     yearwindsp <- glmmTMB(count ~ scale(year) + scale(wind.speed) + 
@@ -233,20 +238,21 @@ run_count_models <- function(group, distrib) {
                           family = nbinom2)
     yearpressure <- glmmTMB(count ~ scale(year) + scale(pressure) + (1 | observer) + 
                               (1 | obs.hours), data = birddat, family = nbinom2)
-    yeardwind <- glmmTMB(count ~ scale(year) + scale(doy) + scale(wind.speed) + 
-                           (1 | observer) + (1 | obs.hours), data = birddat, 
-                         family = nbinom2)
-    nowinddr <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                          scale(wind.speed) + scale(pressure) + (1 | observer) + 
-                          (1 | obs.hours), data = birddat, family = nbinom2)
-    nowindsp <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                          cos(wind.dir) + sin(wind.dir) + scale(pressure) + 
+    yeardwind <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) +
+                           scale(wind.speed) + (1 | observer) + (1 | obs.hours), 
+                         data = birddat, family = nbinom2)
+    nowinddr <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                          scale(tsm) + scale(wind.speed) + scale(pressure) + 
                           (1 | observer) + (1 | obs.hours), data = birddat, 
                         family = nbinom2)
-    global <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                        scale(wind.speed) + cos(wind.dir) + sin(wind.dir) + 
-                        scale(pressure) + (1 | observer) + (1 | obs.hours), 
-                      data = birddat, family = nbinom2)
+    nowindsp <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                          scale(tsm) + cos(wind.dir) + sin(wind.dir) + 
+                          scale(pressure) + (1 | observer) + (1 | obs.hours), 
+                        data = birddat, family = nbinom2)
+    global <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                        scale(tsm) + scale(wind.speed) + cos(wind.dir) + 
+                        sin(wind.dir) + scale(pressure) + (1 | observer) + 
+                        (1 | obs.hours), data = birddat, family = nbinom2)
   }
   
   if (paste(distrib) == "nbinom+zi") {
@@ -254,9 +260,9 @@ run_count_models <- function(group, distrib) {
                     family = nbinom2, ziformula = ~1)
     year <- glmmTMB(count ~ scale(year) + (1 | observer) + (1 | obs.hours), 
                     data = birddat, family = nbinom2, ziformula = ~1)
-    yeardoy <- glmmTMB(count ~ scale(year) + scale(doy) + (1 | observer) + 
-                         (1 | obs.hours), data = birddat, family = nbinom2, 
-                       ziformula = ~1)
+    yeardoy <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                         (1 | observer) + (1 | obs.hours), data = birddat, 
+                       family = nbinom2, ziformula = ~1)
     yeartime <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer) + 
                           (1 | obs.hours), data = birddat, family = nbinom2, 
                         ziformula = ~1)
@@ -269,21 +275,22 @@ run_count_models <- function(group, distrib) {
     yearpressure <- glmmTMB(count ~ scale(year) + scale(pressure) + (1 | observer) + 
                               (1 | obs.hours), data = birddat, family = nbinom2, 
                             ziformula = ~1)
-    yeardwind <- glmmTMB(count ~ scale(year) + scale(doy) + scale(wind.speed) + 
-                           (1 | observer) + (1 | obs.hours), data = birddat, 
-                         family = nbinom2, ziformula = ~1)
-    nowinddr <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                          scale(wind.speed) + scale(pressure) + (1 | observer) + 
-                          (1 | obs.hours), data = birddat, family = nbinom2, 
-                        ziformula = ~1)
-    nowindsp <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                          cos(wind.dir) + sin(wind.dir) + scale(pressure) + 
+    yeardwind <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                           scale(wind.speed) + (1 | observer) + (1 | obs.hours), 
+                         data = birddat, family = nbinom2, ziformula = ~1)
+    nowinddr <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                          scale(tsm) + scale(wind.speed) + scale(pressure) + 
                           (1 | observer) + (1 | obs.hours), data = birddat, 
                         family = nbinom2, ziformula = ~1)
-    global <- glmmTMB(count ~ scale(year) + scale(doy) + scale(tsm) + 
-                        scale(wind.speed) + cos(wind.dir) + sin(wind.dir) + 
-                        scale(pressure) + (1 | observer) + (1 | obs.hours), 
-                      data = birddat, family = nbinom2, ziformula = ~1)
+    nowindsp <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                          scale(tsm) + cos(wind.dir) + sin(wind.dir) + 
+                          scale(pressure) + (1 | observer) + (1 | obs.hours), 
+                        data = birddat, family = nbinom2, ziformula = ~1)
+    global <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
+                        scale(tsm) + scale(wind.speed) + cos(wind.dir) + 
+                        sin(wind.dir) + scale(pressure) + (1 | observer) + 
+                        (1 | obs.hours), data = birddat, family = nbinom2, 
+                      ziformula = ~1)
   }
   
   ## Define list of models
@@ -310,34 +317,15 @@ run_count_models <- function(group, distrib) {
 
 
 
+model_predictions <- function(model, groupname, parameter) {
+  
+  preddat <- as_tibble(ggpredict(model, terms = paste0(parameter, " [all]"))) %>% 
+    rename(param = x) %>% 
+    mutate(group = groupname)
+
+  return(preddat)
+  
+}
 
 
 
-
-
-
-
-
-
-
-
-# null <- glmmTMB(count ~ (1 | observer), data = birddat, family = poisson)
-# year <- glmmTMB(count ~ scale(year) + (1 | observer), data = birddat, 
-#                 family = poisson)
-# yt <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer),
-#               data = birddat, family = poisson)
-# yh <- glmmTMB(count ~ scale(year) + scale(obs.hours) + (1 | observer),
-#               data = birddat, family = poisson)
-# yw <- glmmTMB(count ~ scale(year) + wind.dir + (1 | observer), 
-#               data = birddat, family = poisson)
-# yv <- glmmTMB(count ~ scale(year) + visibility + (1 | observer), 
-#               data = birddat, family = poisson)
-# most <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                   visibility + (1 | observer), data = birddat, 
-#                 family = poisson)
-# most2 <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                    wind.dir + (1 | observer), data = birddat, 
-#                  family = poisson)
-# global <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
-#                     wind.dir + visibility + (1 | observer), data = birddat,
-#                   family = poisson)

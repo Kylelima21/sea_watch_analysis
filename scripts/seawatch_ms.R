@@ -10,6 +10,7 @@ library(lmerTest)
 library(ggeffects)
 library(DHARMa)
 library(AICcmodavg)
+library(lmtest)
 
 ## Source custom functions
 source("scripts/sea_watch_functions.R")
@@ -200,7 +201,11 @@ twd <- swdat2 %>%
          grouping2 = ifelse(species == "DCCO", "DC Cormorant", grouping2),
          grouping2 = ifelse(species == "COLO", "Common Loon", grouping2),
          grouping2 = ifelse(species == "LTDU", "LT Duck", grouping2),
-         grouping2 = ifelse(species == "RBME", "RB Merganser", grouping2)) %>% 
+         grouping2 = ifelse(species == "RBME", "RB Merganser", grouping2),
+         grouping2 = ifelse(species == "WWSC", "WW Scoter", grouping2),
+         grouping2 = ifelse(species == "BLSC", "Black Scoter", grouping2),
+         grouping2 = ifelse(species == "SUSC", "Surf Scoter", grouping2),
+         grouping2 = ifelse(species == "RTLO", "RT Loon", grouping2)) %>% 
   select(species, grouping, grouping2, date:count, wind.speed, wind.dir, pressure, 
          start.time, observer) %>% 
   mutate(filt = ifelse(count == 0 & obs.hours == 0, "rm", "keep"),
@@ -215,7 +220,7 @@ twd <- swdat2 %>%
   ungroup()
 
 
-
+  
 
 #------------------------------------------------#
 ####         Species Trend Modelling          ####
@@ -223,55 +228,261 @@ twd <- swdat2 %>%
 
 source("scripts/sea_watch_functions.R")
 
+## See list of groupings for models
 twd %>% 
   distinct(grouping2) %>% 
   print(n = 25)
 
+## All species should have quadratic doy, see plot
+twd %>% 
+  filter(species == "COEI") %>% 
+  ggplot(aes(x = doy, y = count)) +
+  geom_point()
 
+### Run model selection steps for each grouping
+## Common Eider
 distribution_test(group = "Common Eider")
 model_tests(group = "Common Eider", distrib = "nbinom+zi")
 run_count_models(group = "Common Eider", distrib = "nbinom+zi")
 summary(commoneider_global)
 
-distribution_test(group = "Scoters")
-model_tests(group = "Scoters", distrib = "nbinom")
-run_count_models(group = "Scoters", distrib = "nbinom")
-summary(scoters_yeardwind)
+## All three scoters
+distribution_test(group = "WW Scoter")
+model_tests(group = "WW Scoter", distrib = "nbinom")
+run_count_models(group = "WW Scoter", distrib = "nbinom")
+summary(wwscoter_nowinddr)
 
-distribution_test(group = "Alcids")
-model_tests(group = "Alcids", distrib = "nbinom")
-run_count_models(group = "Alcids", distrib = "nbinom")
-summary(alcids_nowinddr)
+distribution_test(group = "Black Scoter")
+model_tests(group = "Black Scoter", distrib = "nbinom")
+run_count_models(group = "Black Scoter", distrib = "nbinom")
+summary(blackscoter_global)
 
+distribution_test(group = "Surf Scoter")
+model_tests(group = "Surf Scoter", distrib = "nbinom")
+run_count_models(group = "Surf Scoter", distrib = "nbinom")
+summary(surfscoter_nowinddr)
+
+## All alcids
+# distribution_test(group = "Alcids")
+# model_tests(group = "Alcids", distrib = "nbinom")
+# run_count_models(group = "Alcids", distrib = "nbinom")
+# summary(alcids_nowinddr)
+
+## Northern Gannet
 distribution_test(group = "Northern Gannet")
 model_tests(group = "Northern Gannet", distrib = "nbinom+zi")
 run_count_models(group = "Northern Gannet", distrib = "nbinom+zi")
 summary(northerngannet_nowinddr)
 
+## Double-crested Cormorant **Autocorrelated
 distribution_test(group = "DC Cormorant")
 model_tests(group = "DC Cormorant", distrib = "nbinom+zi")
 run_count_models(group = "DC Cormorant", distrib = "nbinom+zi")
-summary(dccormorant_yeardoy)
+summary(dccormorant_nowindsp)
 
+## Common Loon
 distribution_test(group = "Common Loon")
 model_tests(group = "Common Loon", distrib = "nbinom")
 run_count_models(group = "Common Loon", distrib = "nbinom")
-summary(commonloon_nowindsp)
+summary(commonloon_nowinddr)
 
-distribution_test(group = "LT Duck")
-model_tests(group = "LT Duck", distrib = "nbinom")
-run_count_models(group = "LT Duck", distrib = "nbinom")
-summary(ltduck_nowindsp)
+## Red-throated Loon
+distribution_test(group = "RT Loon")
+model_tests(group = "RT Loon", distrib = "nbinom")
+run_count_models(group = "RT Loon", distrib = "nbinom")
+summary(rtloon_global)
 
+## Long-tailed Duck
+# distribution_test(group = "LT Duck")
+# model_tests(group = "LT Duck", distrib = "nbinom")
+# run_count_models(group = "LT Duck", distrib = "nbinom")
+# summary(ltduck_nowindsp)
+
+## Red-breasted Merganser
 distribution_test(group = "RB Merganser")
 model_tests(group = "RB Merganser", distrib = "nbinom")
 run_count_models(group = "RB Merganser", distrib = "nbinom")
-summary(rbmerganser_yeardwind)
+summary(rbmerganser_nowinddr) ## Change models to have only (1 | observer)?
+
+## Both grebes
+# distribution_test(group = "Grebes")
+# model_tests(group = "Grebes", distrib = "nbinom")
+# run_count_models(group = "Grebes", distrib = "nbinom")
+# summary(grebes_nowinddr)
+
+
+
+
+#------------------------------------------------#
+####          Model Visualization             ####
+#------------------------------------------------#
+
+source("scripts/sea_watch_functions.R")
+
+### TRENDS
+
+## Create a list of models to enter into the ggpredict looping function
+modlist.y <- list(commoneider_global, wwscoter_nowinddr, blackscoter_global,
+                surfscoter_nowinddr, northerngannet_nowinddr, dccormorant_nowindsp, 
+                commonloon_nowinddr, rtloon_global, rbmerganser_nowinddr)
+
+
+## List of model names for the looping function
+spnames.y = c("Common Eider", "White-winged Scoter", "Black Scoter", "Surf Scoter",
+            "Northern Gannet", "Double-crested Cormorant", "Common Loon", 
+            "Red-throated Loon", "Red-breasted Merganser")
+
+
+## List the parameter input for the looping function
+param.y <- rep(list("year"), 9)
+
+
+## Looping the models through a custom ggpredict function to return a single df
+modelpreds.y <- pmap_dfr(list(modlist.y, spnames.y, param.y), model_predictions)
+
+
+## Plot the trends for each species using facet wrap 
+modelpreds.y %>% 
+  ggplot(aes(x = param, y = predicted, group = group)) + 
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) + 
+  facet_wrap(vars(group), scales = "free_y") +
+  theme_bw() +
+  labs(x = "", y = "Mean individuals / day") +
+  theme(panel.border = element_rect(linewidth = 1),
+        panel.grid = element_blank(),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        strip.text = element_text(size = 10)
+  )
+
+
+## View model summaries
+summary(commoneider_global)
+summary(wwscoter_nowinddr)
+summary(blackscoter_global)
+summary(surfscoter_nowinddr)
+summary(northerngannet_nowinddr)
+summary(dccormorant_nowindsp)
+summary(commonloon_nowinddr)
+summary(rtloon_global)
+summary(rbmerganser_nowinddr)
 
 
 
 
 
+### DAY OF YEAR
+
+## Create a list of models to enter into the ggpredict looping function
+modlist.d <- list(commoneider_global, wwscoter_nowinddr, blackscoter_global,
+                  surfscoter_nowinddr, northerngannet_nowinddr, dccormorant_nowindsp, 
+                  commonloon_nowinddr, rtloon_global, rbmerganser_nowinddr)
+
+
+## List of model names for the looping function
+spnames.d = c("Common Eider", "White-winged Scoter", "Black Scoter", "Surf Scoter",
+              "Northern Gannet", "Double-crested Cormorant", "Common Loon", 
+              "Red-throated Loon", "Red-breasted Merganser")
+
+
+## List the parameter input for the looping function
+param.d <- rep(list("doy"), 9)
+
+
+## Looping the models through a custom ggpredict function to return a single df
+modelpreds.d <- pmap_dfr(list(modlist.d, spnames.d, param.d), model_predictions)
+
+
+## Plot the trends for each species using facet wrap 
+modelpreds.d %>% 
+  ggplot(aes(x = param, y = predicted, group = group)) + 
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) + 
+  facet_wrap(vars(group), scales = "free_y") +
+  theme_bw() +
+  labs(x = "Ordinal date", y = "Predicted counts / day") +
+  theme(panel.border = element_rect(linewidth = 1),
+        panel.grid = element_blank(),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        strip.text = element_text(size = 10)
+  )
+
+
+## Peak day by species
+modelpreds.d %>% 
+  group_by(group) %>% 
+  slice_max(predicted) %>% 
+  mutate(param2 = as.Date(param, tz = "America/New_York"),
+         param2 = format(param2, "%d %b")) %>% 
+  arrange(param) %>% 
+  select(group, date = param2)
+
+
+## View model summaries
+summary(commoneider_global)
+summary(wwscoter_nowinddr)
+summary(blackscoter_global)
+summary(surfscoter_nowinddr)
+summary(northerngannet_nowinddr)
+summary(dccormorant_nowindsp)
+summary(commonloon_nowinddr)
+summary(rtloon_global)
+summary(grebes_nowinddr)
+
+
+
+
+
+
+### WIND SPEED
+
+## Create a list of models to enter into the ggpredict looping function
+modlist.ws <- list(commoneider_global, wwscoter_nowinddr, blackscoter_global,
+                   surfscoter_nowinddr, northerngannet_nowinddr,
+                   commonloon_nowinddr, rtloon_global, grebes_nowinddr)
+
+
+## List of model names for the looping function
+spnames.ws = c("Common Eider", "White-winged Scoter", "Black Scoter", "Surf Scoter",
+               "Northern Gannet", "Common Loon", "Red-throated Loon", "Grebes")
+
+
+## List the parameter input for the looping function
+param.ws <- rep(list("wind.speed"), 8)
+
+
+## Looping the models through a custom ggpredict function to return a single df
+modelpreds.ws <- pmap_dfr(list(modlist.ws, spnames.ws, param.ws), model_predictions)
+
+
+## Plot the trends for each species using facet wrap 
+modelpreds.ws %>% 
+  ggplot(aes(x = year, y = predicted, group = group)) + 
+  geom_line() +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) + 
+  facet_wrap(vars(group), scales = "free_y") +
+  theme_bw() +
+  labs(x = "", y = "Mean individuals / day") +
+  theme(panel.border = element_rect(linewidth = 1),
+        panel.grid = element_blank(),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 10),
+        strip.text = element_text(size = 10)
+  )
+
+
+## View model summaries
+summary(commoneider_global)
+summary(wwscoter_nowinddr)
+summary(blackscoter_global)
+summary(surfscoter_nowinddr)
+summary(northerngannet_nowinddr)
+summary(dccormorant_nowindsp)
+summary(commonloon_nowinddr)
+summary(rtloon_global)
+summary(grebes_nowinddr)
 
 
 
