@@ -11,6 +11,8 @@ library(ggeffects)
 library(DHARMa)
 library(AICcmodavg)
 library(lmtest)
+library(glmmTMB)
+library(MuMIn)
 
 ## Source custom functions
 source("scripts/sea_watch_functions.R")
@@ -41,8 +43,6 @@ swdat <- tibble(read.csv("data/sea_watch_cleaned_data_20241216.csv")) %>%
          species != "GBBG",
          species != "HERG") %>% 
   select(-c(wind.direction, visibility.score))
-  # rename(wind.dir = wind.direction,
-  #        visibility = visibility.score)
 
 
 
@@ -211,7 +211,9 @@ twd <- swdat2 %>%
   mutate(filt = ifelse(count == 0 & obs.hours == 0, "rm", "keep"),
          start.time = str_replace(start.time, "^(\\d)[:punct:]", "0\\1\\:"),
          start.time = ifelse(!is.na(start.time), paste0(start.time, ":00"), start.time),
-         start.time = as_datetime(paste0("2000-01-01", start.time)),
+         start.time = ifelse(!is.na(start.time), paste0("2000-01-01 ", start.time),
+                              start.time),
+         start.time = as_datetime(start.time),
          midnight = as_datetime("2000-01-01 00:00:00"),
          tsm = as.numeric(difftime(start.time, midnight, units = "hours")),
          doy = yday(date)) %>% 
@@ -223,6 +225,30 @@ twd <- swdat2 %>%
   
 
 #------------------------------------------------#
+####        Waterbird Trend Modelling         ####
+#------------------------------------------------#
+
+wbd <- twd %>% 
+  mutate(grouping2 = ifelse(grouping2 == "Alcids" | grouping2 == "Black Scoter" | 
+                              grouping2 == "Common Eider" | grouping2 == "Common Loon" |
+                              grouping2 == "Cormorants" | grouping2 == "DC Cormorant" |
+                              grouping2 == "Grebes" | grouping2 == "LT Duck" |
+                              grouping2 == "Loons" | grouping2 == "Northern Gannet" |
+                              grouping2 == "RB Merganser" | grouping2 == "RT Loon" |
+                              grouping2 == "Surf Scoter" | grouping2 == "Scoters" |
+                              grouping2 == "WW Scoter", "Waterbirds", grouping2))
+
+
+### Run model selection steps for all waterbirds
+distribution_test(wbd, group = "Waterbirds")
+model_tests(wbd, group = "Waterbirds", distrib = "nbinom+zi") ## Temporal Autocorrelation****
+dredge_count_models(wbd, group = "Waterbirds", distrib = "nbinom+zi") 
+summary(waterbirds_topmod)
+
+
+
+
+#------------------------------------------------#
 ####         Species Trend Modelling          ####
 #------------------------------------------------#
 
@@ -231,84 +257,74 @@ source("scripts/sea_watch_functions.R")
 ## See list of groupings for models
 twd %>% 
   distinct(grouping2) %>% 
-  print(n = 25)
+  print(n = 29)
 
 ## All species should have quadratic doy, see plot
 twd %>% 
   filter(species == "COEI") %>% 
-  ggplot(aes(x = doy, y = count)) +
+  ggplot(aes(x = year, y = count)) +
   geom_point()
 
 ### Run model selection steps for each grouping
 ## Common Eider
-distribution_test(group = "Common Eider")
-model_tests(group = "Common Eider", distrib = "nbinom+zi")
-run_count_models(group = "Common Eider", distrib = "nbinom+zi")
-summary(commoneider_global)
+distribution_test(twd, group = "Common Eider")
+model_tests(twd, group = "Common Eider", distrib = "nbinom+zi")
+dredge_count_models(twd, group = "Common Eider", distrib = "nbinom+zi")
+summary(commoneider_topmod)
 
-## All three scoters
-distribution_test(group = "WW Scoter")
-model_tests(group = "WW Scoter", distrib = "nbinom")
-run_count_models(group = "WW Scoter", distrib = "nbinom")
-summary(wwscoter_nowinddr)
+## White-winged Scoter
+distribution_test(twd, group = "WW Scoter")
+model_tests(twd, group = "WW Scoter", distrib = "nbinom")
+dredge_count_models(twd, group = "WW Scoter", distrib = "nbinom")
+summary(wwscoter_topmod)
 
-distribution_test(group = "Black Scoter")
-model_tests(group = "Black Scoter", distrib = "nbinom")
-run_count_models(group = "Black Scoter", distrib = "nbinom")
-summary(blackscoter_global)
+## Black Scoter
+distribution_test(twd, group = "Black Scoter")
+model_tests(twd, group = "Black Scoter", distrib = "nbinom")
+dredge_count_models(twd, group = "Black Scoter", distrib = "nbinom")
+summary(blackscoter_topmod)
 
-distribution_test(group = "Surf Scoter")
-model_tests(group = "Surf Scoter", distrib = "nbinom")
-run_count_models(group = "Surf Scoter", distrib = "nbinom")
-summary(surfscoter_nowinddr)
-
-## All alcids
-# distribution_test(group = "Alcids")
-# model_tests(group = "Alcids", distrib = "nbinom")
-# run_count_models(group = "Alcids", distrib = "nbinom")
-# summary(alcids_nowinddr)
+## Surf Scoter
+distribution_test(twd, group = "Surf Scoter")
+model_tests(twd, group = "Surf Scoter", distrib = "nbinom")
+dredge_count_models(twd, group = "Surf Scoter", distrib = "nbinom")
+summary(surfscoter_topmod)
 
 ## Northern Gannet
-distribution_test(group = "Northern Gannet")
-model_tests(group = "Northern Gannet", distrib = "nbinom+zi")
-run_count_models(group = "Northern Gannet", distrib = "nbinom+zi")
-summary(northerngannet_nowinddr)
+distribution_test(twd, group = "Northern Gannet")
+model_tests(twd, group = "Northern Gannet", distrib = "nbinom+zi")
+dredge_count_models(twd, group = "Northern Gannet", distrib = "nbinom+zi")
+summary(northerngannet_topmod)
 
-## Double-crested Cormorant **Autocorrelated
-distribution_test(group = "DC Cormorant")
-model_tests(group = "DC Cormorant", distrib = "nbinom+zi")
-run_count_models(group = "DC Cormorant", distrib = "nbinom+zi")
-summary(dccormorant_nowindsp)
+## Double-crested Cormorant
+distribution_test(twd, group = "DC Cormorant")
+model_tests(twd, group = "DC Cormorant", distrib = "nbinom") #**Autocorrelated
+dredge_count_models(twd, group = "DC Cormorant", distrib = "nbinom")
+summary(dccormorant_topmod)
 
 ## Common Loon
-distribution_test(group = "Common Loon")
-model_tests(group = "Common Loon", distrib = "nbinom")
-run_count_models(group = "Common Loon", distrib = "nbinom")
-summary(commonloon_nowinddr)
+distribution_test(twd, group = "Common Loon")
+model_tests(twd, group = "Common Loon", distrib = "nbinom")
+dredge_count_models(twd, group = "Common Loon", distrib = "nbinom")
+summary(commonloon_topmod)
 
 ## Red-throated Loon
-distribution_test(group = "RT Loon")
-model_tests(group = "RT Loon", distrib = "nbinom")
-run_count_models(group = "RT Loon", distrib = "nbinom")
-summary(rtloon_global)
+distribution_test(twd, group = "RT Loon")
+model_tests(twd, group = "RT Loon", distrib = "nbinom")
+dredge_count_models(twd, group = "RT Loon", distrib = "nbinom")
+summary(rtloon_topmod)
 
 ## Long-tailed Duck
-# distribution_test(group = "LT Duck")
-# model_tests(group = "LT Duck", distrib = "nbinom")
-# run_count_models(group = "LT Duck", distrib = "nbinom")
-# summary(ltduck_nowindsp)
+distribution_test(twd, group = "LT Duck")
+model_tests(twd, group = "LT Duck", distrib = "nbinom")
+dredge_count_models(twd, group = "LT Duck", distrib = "nbinom")
+summary(ltduck_topmod)
 
 ## Red-breasted Merganser
-distribution_test(group = "RB Merganser")
-model_tests(group = "RB Merganser", distrib = "nbinom")
-run_count_models(group = "RB Merganser", distrib = "nbinom")
-summary(rbmerganser_nowinddr) ## Change models to have only (1 | observer)?
-
-## Both grebes
-# distribution_test(group = "Grebes")
-# model_tests(group = "Grebes", distrib = "nbinom")
-# run_count_models(group = "Grebes", distrib = "nbinom")
-# summary(grebes_nowinddr)
+distribution_test(twd, group = "RB Merganser")
+model_tests(twd, group = "RB Merganser", distrib = "nbinom")
+dredge_count_models(twd, group = "RB Merganser", distrib = "nbinom")
+summary(rbmerganser_topmod)
 
 
 
@@ -321,20 +337,33 @@ source("scripts/sea_watch_functions.R")
 
 ### TRENDS
 
+summary(commoneider_topmod)
+summary(wwscoter_topmod)
+summary(blackscoter_topmod)
+summary(surfscoter_topmod) #*
+summary(northerngannet_topmod)
+summary(dccormorant_topmod) #*
+summary(commonloon_topmod)
+summary(rtloon_topmod) #*
+summary(ltduck_topmod) #*
+summary(rbmerganser_topmod) #*
+
+
 ## Create a list of models to enter into the ggpredict looping function
-modlist.y <- list(commoneider_global, wwscoter_nowinddr, blackscoter_global,
-                surfscoter_nowinddr, northerngannet_nowinddr, dccormorant_nowindsp, 
-                commonloon_nowinddr, rtloon_global, rbmerganser_nowinddr)
+modlist.y <- list(surfscoter_topmod, dccormorant_topmod, rtloon_topmod, 
+                  ltduck_topmod, rbmerganser_topmod)
 
 
 ## List of model names for the looping function
-spnames.y = c("Common Eider", "White-winged Scoter", "Black Scoter", "Surf Scoter",
-            "Northern Gannet", "Double-crested Cormorant", "Common Loon", 
-            "Red-throated Loon", "Red-breasted Merganser")
+spnames.y = c("Surf Scoter", "Double-crested Cormorant", "Red-throated Loon",
+              "Long-tailed Duck", "Red-breasted Merganser")
 
 
 ## List the parameter input for the looping function
-param.y <- rep(list("year"), 9)
+param.y <- rep(list("year"), 5)
+
+
+#t <- ggpredict(rbmerganser_nowinddr, terms = c("year [all]", "doy [all]"))
 
 
 ## Looping the models through a custom ggpredict function to return a single df
@@ -358,338 +387,12 @@ modelpreds.y %>%
 
 
 ## View model summaries
-summary(commoneider_global)
-summary(wwscoter_nowinddr)
-summary(blackscoter_global)
-summary(surfscoter_nowinddr)
-summary(northerngannet_nowinddr)
-summary(dccormorant_nowindsp)
-summary(commonloon_nowinddr)
-summary(rtloon_global)
-summary(rbmerganser_nowinddr)
+emmeans
 
 
 
 
 
-### DAY OF YEAR
-
-## Create a list of models to enter into the ggpredict looping function
-modlist.d <- list(commoneider_global, wwscoter_nowinddr, blackscoter_global,
-                  surfscoter_nowinddr, northerngannet_nowinddr, dccormorant_nowindsp, 
-                  commonloon_nowinddr, rtloon_global, rbmerganser_nowinddr)
-
-
-## List of model names for the looping function
-spnames.d = c("Common Eider", "White-winged Scoter", "Black Scoter", "Surf Scoter",
-              "Northern Gannet", "Double-crested Cormorant", "Common Loon", 
-              "Red-throated Loon", "Red-breasted Merganser")
-
-
-## List the parameter input for the looping function
-param.d <- rep(list("doy"), 9)
-
-
-## Looping the models through a custom ggpredict function to return a single df
-modelpreds.d <- pmap_dfr(list(modlist.d, spnames.d, param.d), model_predictions)
-
-
-## Plot the trends for each species using facet wrap 
-modelpreds.d %>% 
-  ggplot(aes(x = param, y = predicted, group = group)) + 
-  geom_line() +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) + 
-  facet_wrap(vars(group), scales = "free_y") +
-  theme_bw() +
-  labs(x = "Ordinal date", y = "Predicted counts / day") +
-  theme(panel.border = element_rect(linewidth = 1),
-        panel.grid = element_blank(),
-        axis.text = element_text(size = 10),
-        axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10)
-  )
-
-
-## Peak day by species
-modelpreds.d %>% 
-  group_by(group) %>% 
-  slice_max(predicted) %>% 
-  mutate(param2 = as.Date(param, tz = "America/New_York"),
-         param2 = format(param2, "%d %b")) %>% 
-  arrange(param) %>% 
-  select(group, date = param2)
-
-
-## View model summaries
-summary(commoneider_global)
-summary(wwscoter_nowinddr)
-summary(blackscoter_global)
-summary(surfscoter_nowinddr)
-summary(northerngannet_nowinddr)
-summary(dccormorant_nowindsp)
-summary(commonloon_nowinddr)
-summary(rtloon_global)
-summary(grebes_nowinddr)
-
-
-
-
-
-
-### WIND SPEED
-
-## Create a list of models to enter into the ggpredict looping function
-modlist.ws <- list(commoneider_global, wwscoter_nowinddr, blackscoter_global,
-                   surfscoter_nowinddr, northerngannet_nowinddr,
-                   commonloon_nowinddr, rtloon_global, grebes_nowinddr)
-
-
-## List of model names for the looping function
-spnames.ws = c("Common Eider", "White-winged Scoter", "Black Scoter", "Surf Scoter",
-               "Northern Gannet", "Common Loon", "Red-throated Loon", "Grebes")
-
-
-## List the parameter input for the looping function
-param.ws <- rep(list("wind.speed"), 8)
-
-
-## Looping the models through a custom ggpredict function to return a single df
-modelpreds.ws <- pmap_dfr(list(modlist.ws, spnames.ws, param.ws), model_predictions)
-
-
-## Plot the trends for each species using facet wrap 
-modelpreds.ws %>% 
-  ggplot(aes(x = year, y = predicted, group = group)) + 
-  geom_line() +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) + 
-  facet_wrap(vars(group), scales = "free_y") +
-  theme_bw() +
-  labs(x = "", y = "Mean individuals / day") +
-  theme(panel.border = element_rect(linewidth = 1),
-        panel.grid = element_blank(),
-        axis.text = element_text(size = 10),
-        axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10)
-  )
-
-
-## View model summaries
-summary(commoneider_global)
-summary(wwscoter_nowinddr)
-summary(blackscoter_global)
-summary(surfscoter_nowinddr)
-summary(northerngannet_nowinddr)
-summary(dccormorant_nowindsp)
-summary(commonloon_nowinddr)
-summary(rtloon_global)
-summary(grebes_nowinddr)
-
-
-
-
-
-#------------------------------------------------#
-####            Modelling Tests               ####
-#------------------------------------------------#
-
-# # ## Define waterbirds
-# # waterbirds <- sp.groups %>% 
-# #   as_tibble() %>% 
-# #   filter(grouping %in% c("Other ducks and geese", "Alcids", "Larids",
-# #                          "Scoters", "Common Eider", "Loons", "Cormorants",
-# #                          "Grebes", "Northern Gannet", "Waterbird sp.")) %>% 
-# #   select(species)
-# 
-# 
-# ## Fine tune data for model input
-# coeidt <- twd %>% 
-#   filter(grouping == "Common Eider") %>% 
-#   select(-species) %>% 
-#   group_by(date, year, tsm, total.obs.mins, obs.hours, wind.dir,
-#            visibility, observer) %>% 
-#   summarise(count = sum(count)) %>% 
-#   na.omit(.)
-# 
-# 
-# ## Create distribution model comparison to determine best fit
-# ## Testing Poisson, Negative Binomial, and a Zero-inflated Negative Binomial
-# scot.p <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
-#                           wind.dir + visibility + (1 | observer), data = coeidt,
-#                           family = poisson)
-# scot.b <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
-#                           wind.dir + visibility + (1 | observer), data = coeidt,
-#                           family = nbinom2)
-# scot.zi <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
-#                            wind.dir + visibility + (1 | observer), data = coeidt,
-#                            family = nbinom2, ziformula = ~1)
-# 
-# ## Define list of models
-# models <- list(scot.p, scot.b, scot.zi)
-# 
-# ## Specify model names
-# mod.names <- c('poisson', 'nb', 'nb+zi')
-# 
-# ## Calculate AIC of each model
-# aictab(cand.set = models, modnames = mod.names)
-# 
-# ## Zero-inflated Negative Binomial model fits best
-# ## Test for overdispersion and zero-inflation
-# sim.mod = simulateResiduals(scot.zi)
-# plot(sim.mod)
-# testDispersion(sim.mod)
-# testZeroInflation(sim.mod)
-# 
-# ## Not overdispersed or zero-inflated
-# ## Also need to test for temporal autocorrelation
-# ## Recalculate residuals because we have many obs/time interval
-# sim.mod2 = recalculateResiduals(sim.mod, group = unique(coeidt$year))
-# testTemporalAutocorrelation(sim.mod2, time = unique(coeidt$year), plot = TRUE)
-# 
-# ## Not auto-correlated
-# 
-# 
-# ## Now we can build the models for AICc model comparison
-# ## All models will use the zero-inflated negative binomial model
-# scot.null <- glmmTMB(count ~ (1 | observer), data = coeidt, family = nbinom2, 
-#                      ziformula = ~1)
-# scot.year <- glmmTMB(count ~ scale(year) + (1 | observer), data = coeidt, 
-#                      family = nbinom2, ziformula = ~1)
-# scot.yt <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer),
-#                    data = coeidt, family = nbinom2, ziformula = ~1)
-# scot.yh <- glmmTMB(count ~ scale(year) + scale(obs.hours) + (1 | observer),
-#                    data = coeidt, family = nbinom2, ziformula = ~1)
-# scot.yw <- glmmTMB(count ~ scale(year) + wind.dir + (1 | observer), 
-#                    data = coeidt, family = nbinom2, ziformula = ~1)
-# scot.yv <- glmmTMB(count ~ scale(year) + visibility + (1 | observer), 
-#                    data = coeidt, family = nbinom2, ziformula = ~1)
-# scot.most <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                      visibility + (1 | observer), data = coeidt, 
-#                      family = nbinom2, ziformula = ~1)
-# scot.most2 <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                       wind.dir + (1 | observer), data = coeidt, 
-#                       family = nbinom2, ziformula = ~1)
-# scot.global <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
-#                        wind.dir + visibility + (1 | observer), data = coeidt,
-#                        family = nbinom2, ziformula = ~1)
-# 
-# ## Define list of models
-# models <- list(scot.null, scot.year, scot.yt, scot.yh, scot.yw, scot.yv, 
-#                scot.most, scot.most2, scot.global)
-# 
-# ## Specify model names
-# mod.names <- c('null', 'year', 'year + start time', 'year + hours', 'year + wind',
-#                'year + visibility', 'all - wind', 'all - visibility', 'global')
-# 
-# ## Calculate AIC of each model
-# aictab(cand.set = models, modnames = mod.names)
-# 
-# 
-# # sim.mod = simulateResiduals(scot.global)
-# # plot(sim.mod)
-# # testDispersion(sim.mod)
-# # testZeroInflation(sim.mod)
-# 
-# summary(scot.global)
-
-
-
-
-# swdat %>%
-#   filter(species %in% waterbirds$species) %>%
-#   select(species:day.total, wind.direction:observer) %>%
-#   group_by(date, year, start.time, total.obs.mins, obs.hours, wind.direction,
-#            visibility.score, observer) %>%
-#   summarise(count = sum(day.total)) %>%
-#   rename(wind.dir = wind.direction,
-#          visibility = visibility.score) %>%
-#   mutate(filt = ifelse(count == 0 & obs.hours == 0, "rm", "keep")) %>%
-#   filter(filt == "keep", ) %>%
-#   select(-filt)
-
-
-
-# scot.null <- glmmTMB(count ~ (1 | observer), data = twd)
-# #scot.null <- insight::null_model(scot.most)
-# scot.year <- glmmTMB(count ~ scale(year) + (1 | observer), data = twd)
-# scot.yt <- glmer.nb(count ~ scale(year) + scale(tsm) + (1 | observer), 
-#                     data = twd)
-# scot.yh <- glmer.nb(count ~ scale(year) + scale(obs.hours) + (1 | observer),
-#                  data = twd)
-# scot.yw <- glmer.nb(count ~ scale(year) + wind.dir + (1 | observer), 
-#                     data = twd)
-# scot.yv <- glmer.nb(count ~ scale(year) + visibility + (1 | observer), 
-#                     data = twd)
-# scot.most <- glmer.nb(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                             visibility + (1 | observer), data = twd)
-# scot.most2 <- glmer.nb(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                         wind.dir + (1 | observer), data = twd)
-# # scot.global <- glmer.nb(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-# #                           wind.dir + visibility + (1 | observer), data = twd)
-# 
-# 
-# 
-# ## Define list of models
-# models <- list(scot.null, scot.yt, scot.yh, scot.yw, scot.yv, scot.most, scot.most2)
-# 
-# ## Specify model names
-# mod.names <- c('null', 'year + start time', 'year + hours', 'year + wind',
-#                'year + visibility', 'all - wind', 'all - visibility')
-# 
-# ## Calculate AIC of each model
-# aictab(cand.set = models, modnames = mod.names)
-# 
-# 
-# sim.mod = simulateResiduals(scot.most, re.form = NULL)
-# plot(sim.mod)
-# testDispersion(sim.mod)
-# testZeroInflation(sim.mod)
-
-
-
-
-# scot.null <- glmmTMB(count ~ (1 | observer), data = twd, family = poisson)
-# scot.year <- glmmTMB(count ~ scale(year) + (1 | observer), data = twd, family = poisson)
-# scot.yt <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer),
-#                    data = twd, family = poisson)
-# scot.yh <- glmmTMB(count ~ scale(year) + scale(obs.hours) + (1 | observer),
-#                     data = twd, family = poisson)
-# scot.yw <- glmmTMB(count ~ scale(year) + wind.dir + (1 | observer), 
-#                    data = twd, family = poisson)
-# scot.yv <- glmmTMB(count ~ scale(year) + visibility + (1 | observer), 
-#                    data = twd, family = poisson)
-# scot.most <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                      visibility + (1 | observer), data = twd, family = poisson)
-# scot.most2 <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
-#                       wind.dir + (1 | observer), data = twd, family = poisson)
-# scot.global <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
-#                         wind.dir + visibility + (1 | observer), data = twd,
-#                         family = poisson)
-# scot.global.nb1 <- update(scot.global, family = nbinom1)
-# scot.global.nb2 <- update(scot.global, family = nbinom2)
-# 
-# 
-# ## Define list of models
-# models <- list(scot.null, scot.year, scot.yt, scot.yh, scot.yw, scot.yv, 
-#                scot.most, scot.most2, scot.global, scot.global.nb1, 
-#                scot.global.nb2)
-# 
-# ## Specify model names
-# mod.names <- c('null', 'year', 'year + start time', 'year + hours', 'year + wind',
-#                'year + visibility', 'all - wind', 'all - visibility', 'global',
-#                'global.nb1', 'global.nb2')
-# 
-# ## Calculate AIC of each model
-# aictab(cand.set = models, modnames = mod.names)
-# 
-# 
-# 
-# sim.mod = simulateResiduals(scot.global.nb2, re.form = NULL)
-# plot(sim.mod)
-# testDispersion(sim.mod)
-# testZeroInflation(sim.mod)
-# 
-# 
-# summary(scot.global.nb2)
 
 
 

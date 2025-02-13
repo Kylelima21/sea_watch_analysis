@@ -241,4 +241,216 @@ ggplot(mod.pred.coei, aes(x, predicted)) +
 
 
 
+
+
+
+
+#------------------------------------------------#
+####            Modelling Tests               ####
+#------------------------------------------------#
+
+# # ## Define waterbirds
+# # waterbirds <- sp.groups %>% 
+# #   as_tibble() %>% 
+# #   filter(grouping %in% c("Other ducks and geese", "Alcids", "Larids",
+# #                          "Scoters", "Common Eider", "Loons", "Cormorants",
+# #                          "Grebes", "Northern Gannet", "Waterbird sp.")) %>% 
+# #   select(species)
+# 
+# 
+# ## Fine tune data for model input
+# coeidt <- twd %>% 
+#   filter(grouping == "Common Eider") %>% 
+#   select(-species) %>% 
+#   group_by(date, year, tsm, total.obs.mins, obs.hours, wind.dir,
+#            visibility, observer) %>% 
+#   summarise(count = sum(count)) %>% 
+#   na.omit(.)
+# 
+# 
+# ## Create distribution model comparison to determine best fit
+# ## Testing Poisson, Negative Binomial, and a Zero-inflated Negative Binomial
+# scot.p <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
+#                           wind.dir + visibility + (1 | observer), data = coeidt,
+#                           family = poisson)
+# scot.b <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
+#                           wind.dir + visibility + (1 | observer), data = coeidt,
+#                           family = nbinom2)
+# scot.zi <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
+#                            wind.dir + visibility + (1 | observer), data = coeidt,
+#                            family = nbinom2, ziformula = ~1)
+# 
+# ## Define list of models
+# models <- list(scot.p, scot.b, scot.zi)
+# 
+# ## Specify model names
+# mod.names <- c('poisson', 'nb', 'nb+zi')
+# 
+# ## Calculate AIC of each model
+# aictab(cand.set = models, modnames = mod.names)
+# 
+# ## Zero-inflated Negative Binomial model fits best
+# ## Test for overdispersion and zero-inflation
+# sim.mod = simulateResiduals(scot.zi)
+# plot(sim.mod)
+# testDispersion(sim.mod)
+# testZeroInflation(sim.mod)
+# 
+# ## Not overdispersed or zero-inflated
+# ## Also need to test for temporal autocorrelation
+# ## Recalculate residuals because we have many obs/time interval
+# sim.mod2 = recalculateResiduals(sim.mod, group = unique(coeidt$year))
+# testTemporalAutocorrelation(sim.mod2, time = unique(coeidt$year), plot = TRUE)
+# 
+# ## Not auto-correlated
+# 
+# 
+# ## Now we can build the models for AICc model comparison
+# ## All models will use the zero-inflated negative binomial model
+# scot.null <- glmmTMB(count ~ (1 | observer), data = coeidt, family = nbinom2, 
+#                      ziformula = ~1)
+# scot.year <- glmmTMB(count ~ scale(year) + (1 | observer), data = coeidt, 
+#                      family = nbinom2, ziformula = ~1)
+# scot.yt <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer),
+#                    data = coeidt, family = nbinom2, ziformula = ~1)
+# scot.yh <- glmmTMB(count ~ scale(year) + scale(obs.hours) + (1 | observer),
+#                    data = coeidt, family = nbinom2, ziformula = ~1)
+# scot.yw <- glmmTMB(count ~ scale(year) + wind.dir + (1 | observer), 
+#                    data = coeidt, family = nbinom2, ziformula = ~1)
+# scot.yv <- glmmTMB(count ~ scale(year) + visibility + (1 | observer), 
+#                    data = coeidt, family = nbinom2, ziformula = ~1)
+# scot.most <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
+#                      visibility + (1 | observer), data = coeidt, 
+#                      family = nbinom2, ziformula = ~1)
+# scot.most2 <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
+#                       wind.dir + (1 | observer), data = coeidt, 
+#                       family = nbinom2, ziformula = ~1)
+# scot.global <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
+#                        wind.dir + visibility + (1 | observer), data = coeidt,
+#                        family = nbinom2, ziformula = ~1)
+# 
+# ## Define list of models
+# models <- list(scot.null, scot.year, scot.yt, scot.yh, scot.yw, scot.yv, 
+#                scot.most, scot.most2, scot.global)
+# 
+# ## Specify model names
+# mod.names <- c('null', 'year', 'year + start time', 'year + hours', 'year + wind',
+#                'year + visibility', 'all - wind', 'all - visibility', 'global')
+# 
+# ## Calculate AIC of each model
+# aictab(cand.set = models, modnames = mod.names)
+# 
+# 
+# # sim.mod = simulateResiduals(scot.global)
+# # plot(sim.mod)
+# # testDispersion(sim.mod)
+# # testZeroInflation(sim.mod)
+# 
+# summary(scot.global)
+
+
+
+
+# swdat %>%
+#   filter(species %in% waterbirds$species) %>%
+#   select(species:day.total, wind.direction:observer) %>%
+#   group_by(date, year, start.time, total.obs.mins, obs.hours, wind.direction,
+#            visibility.score, observer) %>%
+#   summarise(count = sum(day.total)) %>%
+#   rename(wind.dir = wind.direction,
+#          visibility = visibility.score) %>%
+#   mutate(filt = ifelse(count == 0 & obs.hours == 0, "rm", "keep")) %>%
+#   filter(filt == "keep", ) %>%
+#   select(-filt)
+
+
+
+# scot.null <- glmmTMB(count ~ (1 | observer), data = twd)
+# #scot.null <- insight::null_model(scot.most)
+# scot.year <- glmmTMB(count ~ scale(year) + (1 | observer), data = twd)
+# scot.yt <- glmer.nb(count ~ scale(year) + scale(tsm) + (1 | observer), 
+#                     data = twd)
+# scot.yh <- glmer.nb(count ~ scale(year) + scale(obs.hours) + (1 | observer),
+#                  data = twd)
+# scot.yw <- glmer.nb(count ~ scale(year) + wind.dir + (1 | observer), 
+#                     data = twd)
+# scot.yv <- glmer.nb(count ~ scale(year) + visibility + (1 | observer), 
+#                     data = twd)
+# scot.most <- glmer.nb(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
+#                             visibility + (1 | observer), data = twd)
+# scot.most2 <- glmer.nb(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
+#                         wind.dir + (1 | observer), data = twd)
+# # scot.global <- glmer.nb(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
+# #                           wind.dir + visibility + (1 | observer), data = twd)
+# 
+# 
+# 
+# ## Define list of models
+# models <- list(scot.null, scot.yt, scot.yh, scot.yw, scot.yv, scot.most, scot.most2)
+# 
+# ## Specify model names
+# mod.names <- c('null', 'year + start time', 'year + hours', 'year + wind',
+#                'year + visibility', 'all - wind', 'all - visibility')
+# 
+# ## Calculate AIC of each model
+# aictab(cand.set = models, modnames = mod.names)
+# 
+# 
+# sim.mod = simulateResiduals(scot.most, re.form = NULL)
+# plot(sim.mod)
+# testDispersion(sim.mod)
+# testZeroInflation(sim.mod)
+
+
+
+
+# scot.null <- glmmTMB(count ~ (1 | observer), data = twd, family = poisson)
+# scot.year <- glmmTMB(count ~ scale(year) + (1 | observer), data = twd, family = poisson)
+# scot.yt <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer),
+#                    data = twd, family = poisson)
+# scot.yh <- glmmTMB(count ~ scale(year) + scale(obs.hours) + (1 | observer),
+#                     data = twd, family = poisson)
+# scot.yw <- glmmTMB(count ~ scale(year) + wind.dir + (1 | observer), 
+#                    data = twd, family = poisson)
+# scot.yv <- glmmTMB(count ~ scale(year) + visibility + (1 | observer), 
+#                    data = twd, family = poisson)
+# scot.most <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
+#                      visibility + (1 | observer), data = twd, family = poisson)
+# scot.most2 <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) + 
+#                       wind.dir + (1 | observer), data = twd, family = poisson)
+# scot.global <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(obs.hours) +
+#                         wind.dir + visibility + (1 | observer), data = twd,
+#                         family = poisson)
+# scot.global.nb1 <- update(scot.global, family = nbinom1)
+# scot.global.nb2 <- update(scot.global, family = nbinom2)
+# 
+# 
+# ## Define list of models
+# models <- list(scot.null, scot.year, scot.yt, scot.yh, scot.yw, scot.yv, 
+#                scot.most, scot.most2, scot.global, scot.global.nb1, 
+#                scot.global.nb2)
+# 
+# ## Specify model names
+# mod.names <- c('null', 'year', 'year + start time', 'year + hours', 'year + wind',
+#                'year + visibility', 'all - wind', 'all - visibility', 'global',
+#                'global.nb1', 'global.nb2')
+# 
+# ## Calculate AIC of each model
+# aictab(cand.set = models, modnames = mod.names)
+# 
+# 
+# 
+# sim.mod = simulateResiduals(scot.global.nb2, re.form = NULL)
+# plot(sim.mod)
+# testDispersion(sim.mod)
+# testZeroInflation(sim.mod)
+# 
+# 
+# summary(scot.global.nb2)
+
+
+
+
+
+
          
