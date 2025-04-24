@@ -1429,20 +1429,6 @@ final_data <- complete_data %>%
 
 
 
-# test <- complete_data %>% 
-#   filter(species == "BLSC" & total.obs.mins != 0) %>% 
-#   mutate(year = as.character(year(date)),
-#          month = month(date),
-#          day = mday(date),
-#          plot.date = as.Date(paste0(2022, "-", month, "-", day)),
-#          obs.hours = total.obs.mins/60,
-#          cph = day.total/obs.hours) %>% 
-#   select(-c(month, day))
-# 
-# 
-# test %>% 
-#   ggplot(aes(x = plot.date, y = cph)) +
-#   geom_smooth()
 
 
 

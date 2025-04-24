@@ -1,71 +1,66 @@
 ## Functions for use in the seawatch_ms.R script
 
 
+#------------------------------------------------#
+####            Plotting function             ####
+#------------------------------------------------#
+
+label_md <- function(x) {
+  
+  format(as.Date(x, origin = "2020-01-01"), "%b-%d")
+  
+}
+
+
+
+
 
 #------------------------------------------------#
 ####           Wind calc. function            ####
 #------------------------------------------------#
 
 ## Function to calculate average wind speed, wind direction, and pressure
-## over the observation period
-avg_weather <- function(dateinput, starttime, endtime) {
+## over the observation period 
+avg_windp <- function(dateinput) {
   
   ## Filter weather data to the specific date and times
   winddat <- schweather %>% 
     filter(date %in% dateinput) %>% 
-    filter(between(datetime, starttime, endtime))
+    mutate(time = format(datetime,  format = "%H:%M:%S")) %>% 
+    filter(time >= "03:00:00" & time < "19:15:00") %>% 
+    select(-time)
+    #filter(between(datetime, starttime, endtime))
   
-  V_u <- vector()
-  V_v <- vector()
+  ## Convert degrees to radians
+  ## Calculate the east-west and north-south components
+  ## Get the average of the east and north components
+  ## Recombine into one angle using arctan2
+  ## Change back to degrees (if you want)
+  dir.avg <- winddat %>% 
+    mutate(dir_rad = wind.direction * pi / 180,
+           dir_east = wind.speed * sin(dir_rad),
+           dir_north = wind.speed * cos(dir_rad)) %>% 
+    group_by(date) %>% 
+    summarise(dir_east_mean = mean(dir_east, na.rm = T),
+              dir_north_mean = mean(dir_north, na.rm = T)) %>% 
+    mutate(dir_mean_rad = atan2(dir_east_mean, dir_north_mean),
+           dir_mean_deg = (360 + dir_mean_rad * 180/pi) %% 360) %>% 
+    select(date, dir_mean_deg)
   
-  ## For loop for each data point in the observation period to calculate U and 
-  ## V components
-  for(i in 1:nrow(winddat)) {
-    
-    V_u[i] = mean(winddat$wind.speed[i] * sin(winddat$wind.direction[i] * pi/180))
-    V_v[i] = mean(winddat$wind.speed[i] * cos(winddat$wind.direction[i] * pi/180))
-    
-  }
-  
-  ## Calculate mean U and V components
-  mV_u = mean(V_u, na.rm = T)
-  mV_v = mean(V_v, na.rm = T)
-  
-  ## Now calculate actual mean
-  mean_WD <- 180 + (180/pi) * atan2(mV_v, mV_u)
-  # mean_WD <- atan2(mV_north, mV_east) * 180/pi
-  
-  ## Need to correct if mean is negative so add 360 to negative numbers
-  # if(is.na(mean_WD)) {
-  #   wind_mean <- mean_WD
-  # }
-  # 
-  # 
-  # if(!is.na(mean_WD)) {
-  # 
-  #   if(mean_WD < 0) {
-  #     wind_mean <- 360 + mean_WD
-  #   }
-  # 
-  #   if(mean_WD >= 0) {
-  #     wind_mean <- mean_WD
-  #   }
-  # 
-  # }
-  
-  wind_mean <- mean_WD
-  
-  ## Finally compile the data into a df for output
-  findat <- winddat %>% 
+  wind.spd <- winddat %>% 
     group_by(date) %>% 
     summarise(wind.speed = mean(wind.speed, na.rm = T),
-              wind.dir = wind_mean,
               pressure = mean(pressure, na.rm = T))
   
+  avgw <- left_join(dir.avg, wind.spd, by = "date") %>% 
+    rename(wind.dir = dir_mean_deg)
   
-  return(findat)
+  ## Return final value in degrees
+  return(avgw)
   
 }
+
+
 
 
 
@@ -77,32 +72,89 @@ avg_weather <- function(dateinput, starttime, endtime) {
 
 ## Create a model to test the best distributions for a global model
 ## Tests Poisson, Negative Binomial, and a Zero-inflated Negative Binomial
-distribution_test <- function(data, group) {
+distribution_test <- function(data, group, autocorrelated = F) {
+  
+  options(dplyr.summarise.inform = FALSE)
   
   ## Filter and fine tune data for model input
-  birddat <- data %>% 
-    filter(grouping2 == paste(group)) %>% 
-    select(-species) %>% 
-    group_by(date, year, doy, tsm, total.obs.mins, obs.hours, wind.speed, 
-             wind.dir, pressure, observer) %>% 
-    summarise(count = sum(count)) %>% 
-    na.omit(.)
+  if (group != "Seabirds") {
+    
+    birddat <- data %>% 
+      filter(species == paste(group)) %>% 
+      select(-species) %>% 
+      group_by(date, year, doy, tsm, total.obs.mins, obs.hours, wind.speed, 
+               wind.dir.cos, wind.dir.sin, pressure, observer) %>% 
+      summarise(count = sum(count)) %>% 
+      na.omit(.)
+  }
   
+
   ## Create distribution model comparison on a global model
   ## Testing Poisson, Negative Binomial, and a Zero-inflated Negative Binomial
-  poissont <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) +
-                        scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                        cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
-                        (1 | observer), data = birddat, family = poisson)
-  nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
-                       scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                       cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
-                       (1 | observer), data = birddat, family = nbinom2)
-  zi.nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) +
-                          scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                          cos(wind.dir) + sin(wind.dir) + scale(obs.hours) +
-                          (1 | observer), data = birddat, family = nbinom2, 
-                        ziformula = ~1)
+  if (group != "Seabirds" & autocorrelated == FALSE) {
+    
+    poissont <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                          scale(pressure) + scale(wind.speed) + 
+                          scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                          (1 | observer), data = birddat, family = poisson)
+    nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) +  
+                         scale(pressure) + scale(wind.speed) + 
+                         scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                         (1 | observer), data = birddat, family = nbinom2)
+    zi.nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                            scale(pressure) + scale(wind.speed) + 
+                            scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                            (1 | observer), data = birddat, family = nbinom2, 
+                          ziformula = ~1)
+  }
+  
+  
+  
+  if(autocorrelated == TRUE) {
+    
+    ## Filter and fine tune data for model input
+    birddat.a <- birddat %>%
+      mutate(thegroup = factor(1),
+             fact.year = factor(year, levels = c("2016", "2017", "2018", "2019", "2020",
+                                            "2021", "2022", "2023", "2024")))
+
+    poissont <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                          I(scale(doy)^2) +  + scale(pressure) + scale(wind.speed) +
+                          scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                          (1 | observer) + ar1(fact.year + 0 | thegroup), data = birddat.a, family = poisson)
+    nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                         I(scale(doy)^2) + scale(pressure) + scale(wind.speed) +
+                         scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                         (1 | observer) + ar1(fact.year + 0 | thegroup), data = birddat.a, family = nbinom2)
+    zi.nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                            I(scale(doy)^2) + scale(pressure) + scale(wind.speed) +
+                            scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                            (1 | observer) + ar1(fact.year + 0 | thegroup), data = birddat.a, family = nbinom2,
+                          ziformula = ~1)
+  }
+
+  
+
+  if(group == "Seabirds") {
+    
+    birddat.w <- data
+
+    poissont <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                          scale(pressure) + scale(wind.speed) +
+                          scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                          (1 | observer) + (year | species), data = birddat.w, family = poisson)
+    nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                         scale(pressure) + scale(wind.speed) +
+                         scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                         (1 | observer) + (year | species), data = birddat.w, family = nbinom2)
+    zi.nbinomt <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                            scale(pressure) + scale(wind.speed) +
+                            scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                            (1 | observer) + (year | species), data = birddat.w, family = nbinom2,
+                          ziformula = ~1)
+    
+  }
+  
   
   ## Define list of models
   models <- list(poissont, nbinomt, zi.nbinomt)
@@ -117,47 +169,123 @@ distribution_test <- function(data, group) {
 
 
 
+
+
 ## Create a model to test the top distribution model for overdispersion, 
 ## zero-inflation, and temporal autocorrelation
 
-model_tests <- function(data, group, distrib) {
+model_tests <- function(data, group, distrib, autocorrelated = F) {
   
   ## Filter and fine tune data for model input
-  birddat <- data %>% 
-    filter(grouping2 == paste(group)) %>% 
-    select(-species) %>% 
-    group_by(date, year, doy, tsm, total.obs.mins, obs.hours, wind.speed, 
-             wind.dir, pressure, observer) %>% 
-    summarise(count = sum(count)) %>% 
-    na.omit(.)
+  if (group != "Seabirds") {
+    
+    birddat <- data %>% 
+      filter(species == paste(group)) %>% 
+      select(-species) %>% 
+      group_by(date, year, doy, tsm, total.obs.mins, obs.hours, wind.speed, 
+               wind.dir.cos, wind.dir.sin, pressure, observer) %>% 
+      summarise(count = sum(count)) %>% 
+      na.omit(.)
+  }
+
   
-  ## Specify best fit distribution from distribution_test
-  if (paste(distrib) == "poisson") {
-    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
-                         scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                         cos(wind.dir) + sin(wind.dir) + scale(obs.hours) +
-                         (1 | observer), data = birddat, family = poisson)
+  if (group != "Seabirds" & autocorrelated == FALSE) {
+    
+    ## Specify best fit distribution from distribution_test
+    if (paste(distrib) == "poisson") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                           (1 | observer), data = birddat, family = poisson)
+    }
+    
+    if (paste(distrib) == "nbinom") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) +  
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer), data = birddat, family = nbinom2)
+    }
+    
+    if (paste(distrib) == "nbinom+zi") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) +  
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer), data = birddat, family = nbinom2, 
+                         ziformula = ~1)
+    }
   }
   
-  if (paste(distrib) == "nbinom") {
-    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
-                         scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                         cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
-                         (1 | observer), data = birddat, family = nbinom2)
+  
+  
+  
+  if(autocorrelated == TRUE) {
+    
+    ## Filter and fine tune data for model input
+    birddat.a <- birddat %>% 
+      mutate(thegroup = factor(1),
+             fact.year = factor(year, levels = c("2016", "2017", "2018", "2019", "2020",
+                                            "2021", "2022", "2023", "2024")))
+    
+    if (paste(distrib) == "poisson") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                           I(scale(doy)^2) + scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                           (1 | observer) + ar1(fact.year + 0 | thegroup),
+                         data = birddat.a, family = poisson)
+    }
+    
+    if (paste(distrib) == "nbinom") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                           I(scale(doy)^2) + scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer) + ar1(fact.year + 0 | thegroup), 
+                         data = birddat.a, family = nbinom2)
+    }
+    
+    if (paste(distrib) == "nbinom+zi") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
+                           I(scale(doy)^2) + scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer) + ar1(fact.year + 0 | thegroup), 
+                         data = birddat.a, family = nbinom2, ziformula = ~1)
+    }
   }
   
-  if (paste(distrib) == "nbinom+zi") {
-    top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
-                         scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                         cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
-                         (1 | observer), data = birddat, family = nbinom2, 
-                       ziformula = ~1)
+  
+  
+  if(group == "Seabirds") {
+    
+    birddat <- data
+    
+    if (paste(distrib) == "poisson") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + 
+                           scale(obs.hours) + (1 | observer) + (year | species), 
+                         data = birddat, family = poisson)
+    }
+    
+    if (paste(distrib) == "nbinom") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + 
+                           scale(obs.hours) + (1 | observer) + (year | species), 
+                         data = birddat, family = nbinom2)
+    }
+    
+    if (paste(distrib) == "nbinom+zi") {
+      top.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) +
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + 
+                           scale(obs.hours) + (1 | observer) + (year | species), 
+                         data = birddat, family = nbinom2, ziformula = ~1)
+    }
   }
   
-  
+    
   ## Test top model for overdispersion and zero-inflation
-  sim.mod = simulateResiduals(top.mod)
-  plot(sim.mod)
+  sim.mod = simulateResiduals(top.mod, plot = T)
+  # plot(sim.mod)
   testDispersion(sim.mod)
   testZeroInflation(sim.mod)
   
@@ -167,6 +295,215 @@ model_tests <- function(data, group, distrib) {
   testTemporalAutocorrelation(sim.mod2, time = unique(birddat$year), plot = TRUE)
   
 }
+
+
+
+
+
+
+
+
+## Run the full set of candidate models with the best distribution and return 
+## the AICc table and top model. Top model is saved as an object to the GE.
+dredge_count_models <- function(data, group, distrib, autocorrelated = FALSE) {
+  
+  if (group != "Seabirds" & autocorrelated == FALSE) {
+    
+    ## Filter and fine tune data for model input
+    birddat <- data %>% 
+      filter(species == paste(group)) %>% 
+      select(-species) %>% 
+      group_by(date, year, doy, tsm, total.obs.mins, obs.hours, wind.speed, 
+               wind.dir.cos, wind.dir.sin, pressure, observer) %>% 
+      summarise(count = sum(count)) %>% 
+      na.omit(.)
+    
+    ## Now we can build the models for AICc model comparison
+    ## Run models based on distribution
+    if (paste(distrib) == "poisson") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer), data = birddat, family = poisson,
+                         na.action = "na.fail")
+    }
+    
+    if (paste(distrib) == "nbinom") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer), data = birddat, family = nbinom2,
+                         na.action = "na.fail")
+    }
+    
+    if (paste(distrib) == "nbinom+zi") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) +
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer), data = birddat, family = nbinom2, 
+                         ziformula = ~1, na.action = "na.fail")
+    }
+  }
+  
+  
+  
+  
+  if(autocorrelated == TRUE) {
+    
+    ## Filter and fine tune data for model input
+    birddat.a <- data %>% 
+      filter(species == paste(group)) %>% 
+      select(-species) %>% 
+      group_by(date, year, doy, tsm, total.obs.mins, obs.hours, wind.speed, 
+               wind.dir.cos, wind.dir.sin, pressure, observer) %>% 
+      summarise(count = sum(count)) %>% 
+      na.omit(.) %>% 
+      mutate(thegroup = factor(1),
+             fact.year = factor(year, levels = c("2016", "2017", "2018", "2019", "2020",
+                                            "2021", "2022", "2023", "2024")))
+    
+    if (paste(distrib) == "poisson") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) +
+                           (1 | observer)  + ar1(fact.year + 0 | thegroup),
+                         data = birddat.a, family = poisson, na.action = "na.fail")
+    }
+    
+    if (paste(distrib) == "nbinom") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) +
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer) + ar1(fact.year + 0 | thegroup), data = birddat.a, family = nbinom2, 
+                         na.action = "na.fail")
+    }
+    
+    if (paste(distrib) == "nbinom+zi") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) +
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + scale(obs.hours) + 
+                           (1 | observer) + ar1(fact.year + 0 | thegroup), 
+                         data = birddat.a, family = nbinom2, ziformula = ~1, 
+                         na.action = "na.fail")
+    }
+  }
+  
+  
+  if (group == "Seabirds") {
+    
+    birddat.w <- data
+    
+    if (paste(distrib) == "poisson") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + 
+                           scale(obs.hours) + (1 | observer) + (year | species), 
+                         data = birddat.w, family = poisson, na.action = "na.fail")
+    }
+    
+    if (paste(distrib) == "nbinom") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) +
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + 
+                           scale(obs.hours) + (1 | observer) + (year | species), 
+                         data = birddat.w, family = nbinom2, na.action = "na.fail")
+    }
+    
+    if (paste(distrib) == "nbinom+zi") {
+      glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + I(scale(doy)^2) + 
+                           scale(pressure) + scale(wind.speed) + 
+                           scale(wind.dir.cos) + scale(wind.dir.sin) + 
+                           scale(obs.hours) + (1 | observer) + (year | species), 
+                         data = birddat.w, family = nbinom2, ziformula = ~1, 
+                         na.action = "na.fail")
+    }
+  }
+  
+  
+  ## Dredge
+  modlist <- dredge(glo.mod, rank = "AICc")
+  
+  ## Export AIC table
+  as_tibble(modlist) %>% 
+    filter(delta < 5) %>% 
+    write.csv(., paste0("outputs/forpub/aic_tables/", tolower(paste0(group)), "_aictab.csv"))
+  
+  ## Calculate AIC of each model
+  # print(subset(modlist, delta < 1))
+  
+  ## Get top model
+  topmod <- get.models(modlist, 1)[[1]]
+  
+  ## Rename to species and model and assign to GE
+  assign(paste0(tolower(str_remove(paste(group), " ")), "_topmod"), topmod,
+         envir = .GlobalEnv)
+
+}
+
+
+
+
+
+## Calculate predictions for plotting
+model_predictions <- function(model, groupname, parameter) {
+  
+  preddat <- as_tibble(ggpredict(model, terms = paste0(parameter, " [all]"))) %>%
+    rename(param = x) %>%
+    mutate(group = groupname)
+  
+  return(preddat)
+  
+}
+
+
+
+
+
+
+## Test final model for issues
+test_final_mod <- function(model, outlieryes = F) {
+  
+  ## Test top model for overdispersion and zero-inflation
+  sim.mod = simulateResiduals(model, plot = T)
+  # plot(sim.mod)
+  testDispersion(sim.mod)
+  testZeroInflation(sim.mod)
+  
+  ## Test for temporal autocorrelation
+  ## Recalculate residuals because we have many obs/time interval
+  sim.mod2 = recalculateResiduals(sim.mod, group = unique(twd$year))
+  testTemporalAutocorrelation(sim.mod2, time = unique(twd$year), plot = TRUE)
+  
+  if (outlieryes == T) {
+    testOutliers(sim.mod, type = "bootstrap")
+  }
+  
+}
+
+
+
+
+
+
+
+## Calculate marginal effects at the mean
+calc_AME <- function(model, group) {
+  
+  output <- avg_slopes(model) %>% 
+    as_tibble() %>% 
+    mutate(species = paste(group)) %>% 
+    select(species, term, estimate, conf.low, conf.high)
+  
+  return(output)
+  
+}
+
+
+
+
+
+
+
 
 
 
@@ -196,11 +533,11 @@ run_count_models <- function(data, group, distrib) {
     yeartime <- glmmTMB(count ~ scale(year) + scale(tsm) + (1 | observer),
                         data = birddat, family = poisson)
     yearwindsp <- glmmTMB(count ~ scale(year) + scale(wind.speed) + 
-                         (1 | observer), data = birddat, 
-                         family = poisson)
+                            (1 | observer), data = birddat, 
+                          family = poisson)
     yearwinddr <- glmmTMB(count ~ scale(year) + cos(wind.dir) + sin(wind.dir) + 
-                         (1 | observer), data = birddat, 
-                         family = poisson)
+                            (1 | observer), data = birddat, 
+                          family = poisson)
     yearpressure <- glmmTMB(count ~ scale(year) + scale(pressure) + (1 | observer),
                             data = birddat, family = poisson)
     yeardwind <- glmmTMB(count ~ scale(year) + scale(doy) + scale(doy^2) + 
@@ -312,85 +649,51 @@ run_count_models <- function(data, group, distrib) {
                                         modnames = mod.names)[1,1], " "))),
          topmodel, envir = .GlobalEnv)
   
-}
-
-
-
-
-
-
-
-## Run the full set of candidate models with the best distribution and return 
-## the AICc table and top model. Top model is saved as an object to the GE.
-dredge_count_models <- function(data, group, distrib) {
+  ## Test top model for overdispersion and zero-inflation
+  sim.mod = simulateResiduals(topmodel)
+  plot(sim.mod)
+  testDispersion(sim.mod)
+  testZeroInflation(sim.mod)
   
-  ## Filter and fine tune data for model input
-  birddat <- data %>% 
-    filter(grouping2 == paste(group)) %>% 
-    select(-species) %>% 
-    group_by(date, year, doy, tsm, total.obs.mins, obs.hours, wind.speed, 
-             wind.dir, pressure, observer) %>% 
-    summarise(count = sum(count)) %>% 
-    na.omit(.)
-  
-  ## Now we can build the models for AICc model comparison
-  ## Run models based on distribution
-  if (paste(distrib) == "poisson") {
-    glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
-                       scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                       cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
-                       (1 | observer), data = birddat, family = poisson)
-  }
-  
-  if (paste(distrib) == "nbinom") {
-    glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
-                       scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                       cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
-                       (1 | observer), data = birddat, family = nbinom2)
-  }
-  
-  if (paste(distrib) == "nbinom+zi") {
-    glo.mod <- glmmTMB(count ~ scale(year) + scale(tsm) + scale(doy) + 
-                         scale(doy^2) + scale(pressure) + scale(wind.speed) + 
-                         cos(wind.dir) + sin(wind.dir) + scale(obs.hours) + 
-                         (1 | observer), data = birddat, family = nbinom2, 
-                       ziformula = ~1)
-  }
-  
-  ## Dredge
-  options(na.action = "na.fail")
-  modlist <- dredge(glo.mod, rank = "AICc")
-  
-  ## Calculate AIC of each model
-  print(subset(modlist, delta < 4))
-  
-  ## Get top model and rename to species and model
-  topmod <- get.models(modlist, 1)[[1]]
-  assign(paste0(tolower(str_remove(paste(group), " ")), "_topmod"), topmod,
-         envir = .GlobalEnv)
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-model_predictions <- function(model, groupname, parameter) {
-  
-  preddat <- as_tibble(ggpredict(model, terms = paste0(parameter, " [all]"))) %>% 
-    rename(param = x) %>% 
-    mutate(group = groupname)
-
-  return(preddat)
+  ## Test for temporal autocorrelation
+  ## Recalculate residuals because we have many obs/time interval
+  sim.mod2 = recalculateResiduals(sim.mod, group = unique(birddat$year))
+  testTemporalAutocorrelation(sim.mod2, time = unique(birddat$year), plot = TRUE)
   
 }
 
 
+
+
+# null <- glmmTMB(count ~ (1 | observer), data = birddat, 
+#                 family = nbinom2)
+# year <- glmmTMB(count ~ scale(year) + (1 | observer), 
+#                 data = birddat, family = nbinom2)
+# doy <- glmmTMB(count ~ scale(doy) + scale(doy^2) + 
+#                      (1 | observer), data = birddat, 
+#                    family = nbinom2)
+# starttime <- glmmTMB(count ~ scale(tsm) + (1 | observer),
+#                     data = birddat, family = nbinom2)
+# hours <- glmmTMB(count ~ scale(obs.hours) + (1 | observer),
+#                 data = birddat, family = nbinom2)
+# windsp <- glmmTMB(count ~ scale(wind.speed) + 
+#                         (1 | observer), data = birddat, 
+#                       family = nbinom2)
+# winddr <- glmmTMB(count ~ cos(wind.dir) + sin(wind.dir) + 
+#                         (1 | observer), data = birddat, 
+#                       family = nbinom2)
+# pressure <- glmmTMB(count ~ scale(pressure) + (1 | observer), 
+#                         data = birddat, family = nbinom2)
+# 
+# 
+# 
+# ## Define list of models
+# models <- list(null, year, doy, starttime, hours, windsp, winddr, pressure)
+# 
+# ## Specify model names
+# mod.names <- c('null', 'year', 'doy', 'starttime', 'hours', 'windsp', 
+#                'winddr', 'pressure')
+# 
+# ## Calculate AIC of each model
+# print(aictab(cand.set = models, modnames = mod.names))
 

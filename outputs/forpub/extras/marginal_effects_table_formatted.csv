@@ -1,0 +1,11 @@
+Species,Year,Ordinal day of year,Observation hours,Time since midnight,Wind speed,Wind direction (N),Wind direction (E),Pressure
+Black Scoter,,0.6 (0.3 to 0.9),7.8 (3.7 to 11.8),,1.2 (0.1 to 2.3),2.7 (-0.2 to 5.6),,
+Common Eider,,3.3 (2 to 4.5),75.5 (49.7 to 101.4),,-10.7 (-18.9 to -2.6),,,0 (0 to 0.1)
+Common Loon,,0.4 (0.3 to 0.6),11.2 (8.4 to 13.9),-2.7 (-4.2 to -1.1),,,,0 (0 to 0)
+Double-crested Cormorant,53 (2.7 to 103.3),-2.9 (-6.8 to 1),315.8 (182.6 to 449),,,85.2 (-21.4 to 191.7),,0.2 (0.1 to 0.3)
+Long-tailed Duck,0.2 (0 to 0.4),0.3 (0.1 to 0.6),1 (0.3 to 1.7),,,,0.3 (-0.2 to 0.8),0 (0 to 0)
+Northern Gannet,,0.6 (0.1 to 1.2),35.2 (20 to 50.3),-8.1 (-16.9 to 0.6),,,,0 (-0.1 to 0)
+Red-breasted Merganser,1.9 (0.9 to 2.8),0.6 (0.4 to 0.9),3.3 (1.8 to 4.9),,0.5 (-0.1 to 1),,,0 (0 to 0)
+Red-throated Loon,0.3 (0.1 to 0.6),0.2 (0.1 to 0.3),1 (0.5 to 1.5),,-0.2 (-0.4 to -0.1),,0.3 (-0.1 to 0.7),
+Surf Scoter,6.1 (0 to 12.1),0.4 (-0.1 to 1),27.5 (14.4 to 40.7),-8.5 (-16.4 to -0.5),6 (1 to 11),,,0 (0 to 0)
+White-winged Scoter,,0.3 (0.1 to 0.4),5.2 (3.2 to 7.2),,0.7 (0.1 to 1.3),,,

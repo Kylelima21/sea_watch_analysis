@@ -15,21 +15,30 @@ library(scales)
 #------------------------------------------------#
 
 ## Read, fix some formatting/groups, and calculate stats
-flightcomp <- tibble(read.csv("outputs/species_totals_data_groupings.csv")) %>% 
-  mutate(grouping = str_replace(grouping, "Alcids", "Other"),
-         grouping = str_replace(grouping, "Passerines", "Other"),
-         grouping = str_replace(grouping, "Grebes", "Other"),
-         grouping = str_replace(grouping, "Raptors", "Other"),
-         grouping = str_replace(grouping, "Shorebirds", "Other"),
+sp.groups <- read.csv("outputs/species_groupings.csv")
+
+flightcomp <- tibble(read.csv("outputs/species_totals.csv")) %>% 
+  left_join(., sp.groups, by = "species") %>% 
+  select(-X) %>% 
+  mutate(grouping = str_replace(grouping, "Alcids", "Other waterbirds"),
+         grouping = str_replace(grouping, "Grebes", "Other waterbirds"),
+         grouping = str_replace(grouping, "Raptors", "Other waterbirds"),
+         grouping = str_replace(grouping, "Waterbird sp.", "Other waterbirds"),
+         grouping = str_replace(grouping, "Herons", "Other waterbirds"),
+         grouping = str_replace(grouping, "Jaegers", "Other waterbirds"),
+         grouping = str_replace(grouping, "Shearwaters", "Other waterbirds"),
+         grouping = str_replace(grouping, "Storm-Petrels", "Other waterbirds"),
+         grouping = str_replace(grouping, "Shorebirds", "Other waterbirds"),
          grouping = str_replace(grouping, "Other ducks and geese", "Other ducks/geese"),
          grouping = str_replace(grouping, "Larids", "Gulls")) %>% 
   group_by(grouping) %>% 
-  summarise(total = sum(total.ind)) %>% 
+  summarise(total = sum(total.indiv)) %>% 
   arrange(-total) %>% 
+  filter(row_number() < 9) %>% 
   mutate(percent = 100*(total/sum(total)),
          grouping = factor(grouping, levels = c("Cormorants", "Scoters", "Common Eider",
                                                 "Northern Gannet", "Other ducks/geese",
-                                                "Gulls", "Loons", "Other")))
+                                                "Loons", "Gulls", "Other waterbirds")))
 
 
 ## Write csv
@@ -40,9 +49,9 @@ flightcomp <- tibble(read.csv("outputs/species_totals_data_groupings.csv")) %>%
 flightcomp %>% 
   ggplot(aes(x = grouping, y = total, fill = total)) +
   geom_bar(stat = "identity", color = "black", linewidth = 0.4) +
-  scale_y_continuous(labels = comma, expand = c(0,0), limits = c(0, 175000)) +
+  scale_y_continuous(labels = comma, expand = c(0,0), limits = c(0, 225000)) +
   labs(y = "Total migrants", x = NULL, title = "Seasonal Waterbird Flight Composition",
-       subtitle = "2016 - 2022") +
+       subtitle = "2016 - 2024") +
   theme_classic() +
   theme(plot.title.position = "plot",
         plot.title = element_text(face = "bold", size = 18),
@@ -55,7 +64,7 @@ flightcomp %>%
 
 
 ## Save plot
-# ggsave("outputs/flight_composition_figure3.png", dpi = 700, height = 5.5, width = 8)
+# ggsave("outputs/flight_composition_figure_2025.png", dpi = 700, height = 5.5, width = 8)
 
 
 
