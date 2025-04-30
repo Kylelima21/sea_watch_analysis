@@ -343,9 +343,9 @@ testOutliers(sim.modallt, type = "bootstrap")
 ####         Species Trend Modelling          ####
 #------------------------------------------------#
 
-## All species should have quadratic doy, see plot
+## Many species should have quadratic doy, see plot
 sbmd %>% 
-  filter(species == "COEI") %>% 
+  filter(species == "NOGA") %>% 
   ggplot(aes(x = doy, y = count)) +
   geom_point()
 
@@ -383,7 +383,7 @@ summary(noga_topmod)
 distribution_test(sbmd, group = "SUSC")
 model_tests(sbmd, group = "SUSC", distrib = "nbinom")
 dredge_count_models(sbmd, group = "SUSC", distrib = "nbinom")
-test_final_mod(susc_topmod)
+test_final_mod(susc_topmod, outlieryes = T)
 summary(susc_topmod)
 
 ## White-winged Scoter
@@ -484,32 +484,31 @@ ame.tab.all <- ame.all %>%
 ### Species specific trends
 summary(coei_topmod)
 summary(colo_topmod)
-summary(dcco_topmod)
-summary(noga_topmod)
+summary(dcco_topmod) #y **
+summary(noga_topmod) 
 summary(susc_topmod)
-summary(wwsc_topmod)
+summary(wwsc_topmod) #y
 summary(blsc_topmod)
-summary(grco_topmod) #*+
-summary(rbme_topmod) #*+
-summary(rtlo_topmod) #*+
-summary(ltdu_topmod)
-summary(blgu_topmod) #*-
-summary(rngr_topmod) #*-
+summary(grco_topmod) #y **
+summary(rbme_topmod) #y **
+summary(rtlo_topmod) #y **
+summary(ltdu_topmod) #y
+summary(blgu_topmod) #y **
+summary(rngr_topmod) #y **
 summary(razo_topmod)
 
 
 ## Create a list of models to enter into the ggpredict looping function
-modlist.y <- list(grco_topmod, rbme_topmod, rtlo_topmod,
-                  blgu_topmod, rngr_topmod)
+modlist.y <- list(dcco_topmod, wwsc_topmod, grco_topmod, rbme_topmod, rtlo_topmod,
+                  ltdu_topmod, blgu_topmod, rngr_topmod)
 
 
 ## List of model names for the looping function
-spnames.y = c("GRCO", "RBME", "RTLO",
-              "BLGU", "RNGR")
+spnames.y = c("DCCO", "WWSC", "GRCO", "RBME", "RTLO", "LTDU", "BLGU", "RNGR")
 
 
 ## List the parameter input for the looping function
-param.y <- rep(list("year"), 5)
+param.y <- rep(list("year"), 8)
 
 
 ## Looping the models through a custom ggpredict function to return a single df
@@ -522,10 +521,14 @@ modelpreds.y %>%
                           ifelse(group == "RBME", "Mergus serrator",
                                  ifelse(group == "RTLO", "Gavia stellata",
                                         ifelse(group == "BLGU", "Cepphus grylle",
-                                               ifelse(group == "RNGR", "Podiceps grisegena", "error"))))),
-         sciname = factor(sciname, levels = c("Phalacrocorax carbo", "Mergus serrator", 
-                                            "Gavia stellata", "Cepphus grylle", 
-                                            "Podiceps grisegena"))) %>%
+                                               ifelse(group == "RNGR", "Podiceps grisegena", 
+                                                      ifelse(group == "DCCO", "Nannopterum auritum",
+                                                             ifelse(group == "WWSC", "Melanitta deglandi",
+                                                                    ifelse(group == "LTDU", "Clangula hyemalis", "error")))))))),
+         sciname = factor(sciname, levels = c("Cepphus grylle", "Melanitta deglandi",
+                                              "Podiceps grisegena", "Clangula hyemalis",
+                                              "Gavia stellata", "Mergus serrator",
+                                              "Nannopterum auritum", "Phalacrocorax carbo"))) %>%
   ggplot(aes(x = param, y = predicted, group = sciname)) + 
   geom_line() +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) + 

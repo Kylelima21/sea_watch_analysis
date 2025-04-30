@@ -421,15 +421,20 @@ dredge_count_models <- function(data, group, distrib, autocorrelated = FALSE) {
   
   
   ## Dredge
-  modlist <- dredge(glo.mod, rank = "AICc")
+  modlist <- dredge(glo.mod, rank = "AICc", subset = dc(`cond(scale(doy))`, `cond(I(scale(doy)^2))`))
   
   ## Export AIC table
   as_tibble(modlist) %>% 
-    filter(delta < 5) %>% 
+    filter(delta < 4) %>% 
     write.csv(., paste0("outputs/forpub/aic_tables/", tolower(paste0(group)), "_aictab.csv"))
   
-  ## Calculate AIC of each model
-  # print(subset(modlist, delta < 1))
+  ## Fix non-convergence in DCCO so that we can calculate weights
+  if (group == "DCCO") {
+  valid_models <- subset(modlist, !is.na(AICc)) %>% 
+    as_tibble() %>% 
+    filter(delta < 4) %>% 
+    write.csv(., paste0("outputs/forpub/aic_tables/", tolower(paste0(group)), "_aictab.csv"))
+  }
   
   ## Get top model
   topmod <- get.models(modlist, 1)[[1]]
