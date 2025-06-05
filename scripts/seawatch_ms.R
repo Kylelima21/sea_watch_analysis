@@ -14,6 +14,7 @@ library(lmtest)
 library(glmmTMB)
 library(MuMIn)
 library(marginaleffects)
+library(emmeans)
 
 ## Source custom functions
 source("scripts/sea_watch_functions.R")
@@ -109,7 +110,8 @@ swdat2 %>%
   mutate(daycount = 1) %>% 
   group_by(year) %>% 
   summarise(days = sum(daycount)) %>% 
-  summarise(mean = mean(days))
+  summarise(mean = mean(days),
+            sd = sd(days))
 
 
 ## Total hours surveyed -- 2,563 hours
@@ -225,7 +227,9 @@ twd <- swdat2 %>%
 #------------------------------------------------#
 ####         Seabird Trend Modelling          ####
 #------------------------------------------------#
-             
+
+### Clean data
+## Remove non-species from seabird data        
 wbd <- twd %>% 
   filter(grouping3 == "Seabirds") %>% 
   filter(species != "Scoter sp." & 
@@ -236,15 +240,9 @@ wbd <- twd %>%
            species != "Shearwater sp." &
            species != "Grebe sp." &
            species != "TBMU/COMU")
-  # mutate(grouping2 = ifelse(grouping2 == "Alcids" | grouping2 == "Black Scoter" |
-  #                             grouping2 == "Common Eider" | grouping2 == "Common Loon" |
-  #                             grouping2 == "Cormorants" | grouping2 == "DC Cormorant" |
-  #                             grouping2 == "Grebes" | grouping2 == "LT Duck" |
-  #                             grouping2 == "Loons" | grouping2 == "Northern Gannet" |
-  #                             grouping2 == "RB Merganser" | grouping2 == "RT Loon" |
-  #                             grouping2 == "Surf Scoter" | grouping2 == "Scoters" |
-  #                             grouping2 == "WW Scoter", "Waterbirds", grouping2))
-  
+
+
+## Determine number of years each species was counted in
 spyears <- wbd %>% 
   group_by(species, year) %>% 
   summarise(count = sum(count)) %>% 
@@ -255,36 +253,41 @@ spyears <- wbd %>%
   arrange(-years.detected)
 
 
+## Create list of the species from all 9 years
 tsplist <- spyears %>% 
   filter(years.detected == 9) %>% 
   select(species) %>% 
   as.list()
 
 
+## Filter data to only those 14 species
 seabird.dat <- wbd %>% 
   filter(species %in% tsplist$species) %>% 
   select(-c(grouping, grouping2, grouping3))
 
 
-
-## Summary stats for results
+### Summary stats for results
+## Total count by species
 seabird.dat %>% 
   group_by(species) %>% 
   summarise(count = sum(count)) %>% 
   arrange(-count)
 
+## Total seabird count
 seabird.dat %>% 
   group_by(species) %>% 
   summarise(count = sum(count)) %>% 
   arrange(-count) %>% 
   summarise(sum = sum(count))
 
+## Total count by species by year 
 seabird.dat %>% 
   group_by(species, year) %>% 
   summarise(count = sum(count)) %>%
   arrange(-count) %>% 
   pivot_wider(names_from = year, values_from = count)
 
+## Number of days counted on
 seabird.dat %>% 
   group_by(species, date) %>% 
   summarise(count = sum(count)) %>% 
@@ -295,6 +298,7 @@ seabird.dat %>%
   arrange(-detection.days)
 
 
+### Final cleaning for modelling
 ## Finalizing data for models by removing NAs
 sbmd <- seabird.dat %>% 
   group_by(date, year, doy, tsm, species, total.obs.mins, obs.hours, wind.speed, 
@@ -303,7 +307,8 @@ sbmd <- seabird.dat %>%
   na.omit(.)
 
 
-### Run model selection steps for all seabirds
+### All seabirds model
+## Run model selection steps for all seabirds
 distribution_test(sbmd, group = "Seabirds")
 model_tests(sbmd, group = "Seabirds", distrib = "nbinom")
 dredge_count_models(sbmd, group = "Seabirds", distrib = "nbinom") 
@@ -313,28 +318,6 @@ summary(seabirds_topmod)
 ## Check model residuals
 sim.modallt = simulateResiduals(seabirds_topmod, plot = T)
 testOutliers(sim.modallt, type = "bootstrap")
-
-
-## Get prediction data for plotting
-# predict.allt <- ggpredict(seabirds_topmod, terms = "doy [all]") %>% 
-#   rename(year = x)
-
-
-## Plot
-# predict.allt %>% 
-#   ggplot(aes(year, predicted)) + 
-#   geom_line() +
-#   geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) +
-#   labs(y = "Count", x = "Year") +
-#   theme_bw() +
-#   theme(panel.grid = element_blank(),
-#         axis.title.x = element_text(margin = unit(c(5, 0, 1, 0), "mm")),
-#         axis.title.y = element_text(margin = unit(c(0, 5, 0, 1), "mm")))
-
-
-## Export plot
-# ggsave("outputs/forpub/seabird_trends.png", height = 5.7, width = 7,
-#        units = "in", dpi = 1200)
 
 
 
@@ -349,7 +332,7 @@ sbmd %>%
   ggplot(aes(x = doy, y = count)) +
   geom_point()
 
-source("scripts/sea_watch_functions.R")
+
 ### Run model selection steps for each grouping
 ## Common Eider
 distribution_test(sbmd, group = "COEI")
@@ -366,7 +349,7 @@ test_final_mod(colo_topmod)
 summary(colo_topmod)
 
 ## Double-crested Cormorant
-distribution_test(sbmd, group = "DCCO", autocorrelated = T) #*Zero-inflated doesn't converge, but just use nbinom
+distribution_test(sbmd, group = "DCCO", autocorrelated = T) #*Zero-inflated doesn't converge, but use nbinom
 model_tests(sbmd, group = "DCCO", distrib = "nbinom", autocorrelated = T) #**Autocorrelated
 dredge_count_models(sbmd, group = "DCCO", distrib = "nbinom", autocorrelated = T)
 test_final_mod(dcco_topmod)
@@ -482,20 +465,20 @@ ame.tab.all <- ame.all %>%
 
 
 ### Species specific trends
-summary(coei_topmod)
-summary(colo_topmod)
+summary(coei_topmod) 
+summary(colo_topmod) 
 summary(dcco_topmod) #y **
-summary(noga_topmod) 
+summary(noga_topmod)
 summary(susc_topmod)
-summary(wwsc_topmod) #y
-summary(blsc_topmod)
+summary(wwsc_topmod) #y **
+summary(blsc_topmod) 
 summary(grco_topmod) #y **
 summary(rbme_topmod) #y **
 summary(rtlo_topmod) #y **
-summary(ltdu_topmod) #y
+summary(ltdu_topmod) #y **
 summary(blgu_topmod) #y **
 summary(rngr_topmod) #y **
-summary(razo_topmod)
+summary(razo_topmod) 
 
 
 ## Create a list of models to enter into the ggpredict looping function
@@ -521,7 +504,7 @@ modelpreds.y %>%
                           ifelse(group == "RBME", "Mergus serrator",
                                  ifelse(group == "RTLO", "Gavia stellata",
                                         ifelse(group == "BLGU", "Cepphus grylle",
-                                               ifelse(group == "RNGR", "Podiceps grisegena", 
+                                               ifelse(group == "RNGR", "Podiceps grisegena",
                                                       ifelse(group == "DCCO", "Nannopterum auritum",
                                                              ifelse(group == "WWSC", "Melanitta deglandi",
                                                                     ifelse(group == "LTDU", "Clangula hyemalis", "error")))))))),
@@ -546,8 +529,8 @@ modelpreds.y %>%
 
 
 ## Export plot
-# ggsave("outputs/forpub/seabird_sig_trend.png", height = 5.8, width = 7,
-#        units = "in", dpi = 1200)
+ggsave("outputs/forpub/seabird_sig_trend.png", height = 5.8, width = 7,
+       units = "in", dpi = 1200)
 
 
 ### Calculate marginal effects at the mean
@@ -583,7 +566,7 @@ ame.tab <- ames %>%
 
 
 ## Save table
-# write.csv(ame.tab, "outputs/forpub/average_marginal_effects_table.csv", row.names = F)
+write.csv(ame.tab, "outputs/forpub/average_marginal_effects_table.csv", row.names = F)
 
 
 
@@ -605,15 +588,17 @@ phen_dat <- read.csv("outputs/seabird_species_stats.csv") %>%
   left_join(phendat, ., by = "species") %>% 
   select(sci.name, species, year, w.mean.doy) %>% 
   rename(spcode = species,
-         species = sci.name)
+         species = sci.name) %>% 
+  mutate(species = as.factor(species))
 
 
 #------------------------------------------------#
 
 ### Produce model and outputs for all waterbirds
 ## Create model with a random effect of species to account for psuedoreplication
-m.all <- glmmTMB(w.mean.doy ~ scale(year) + (1 | species), data = phen_dat)
+m.all <- glmmTMB(w.mean.doy ~ year + (1 | species), data = phen_dat)
 summary(m.all)
+confint(m.all, 'year', level = 0.95)
 
 
 ## Check model residuals
@@ -623,6 +608,8 @@ sim.all = simulateResiduals(m.all, plot = T)
 ## Predict peak migration date from the model
 predict.all <- ggpredict(m.all, terms = c("year")) %>% 
   rename(year = x)
+
+predict.all$predicted[9] - predict.all$predicted[1]
 
 
 ## Plot
@@ -640,8 +627,8 @@ predict.all %>%
 
 
 ## Export plot
-# ggsave("outputs/forpub/seabird_mig_timing_trend.png", height = 5.7, width = 7,
-#        units = "in", dpi = 1200)
+ggsave("outputs/forpub/seabird_mig_timing_trend.png", height = 5.7, width = 7,
+       units = "in", dpi = 1200)
 
 
 
@@ -649,7 +636,7 @@ predict.all %>%
 
 ### Produce model and outputs for each focal species
 ## Create model with an interaction term of year*species
-m.spp <- glmmTMB(w.mean.doy ~ scale(year)*species, data = phen_dat)
+m.spp <- glmmTMB(w.mean.doy ~ year*species, data = phen_dat)
 summary(m.spp)
 
 
@@ -663,12 +650,17 @@ testCategorical(sim.spp, phen_dat$species)
 
 ## Now test how each species trend compares to a slope of 0
 emms <- emtrends(m.spp, specs = "species", var = "year") %>% 
-  test(.)
-emms
+  test(.) %>% 
+  arrange(p.value)
+
+emms2 <- emms %>% 
+  mutate(lci = year.trend - 1.96*SE,
+         uci = year.trend + 1.96*SE) %>% 
+  select(species, year.trend, lci, uci, SE:p.value)
 
 
 ## Write out emms table for supplement
-# write.csv(emms, "outputs/forpub/species_emms_table.csv", row.names = F)
+write.csv(emms2, "outputs/forpub/species_emms_table.csv", row.names = F)
 
 
 ## Predict peak migration date for each species from the model
@@ -694,8 +686,8 @@ predict.spp %>%
 
 
 ## Export plot
-# ggsave("outputs/forpub/species_mig_timing_trend.png", height = 6.5, width = 7,
-#        units = "in", dpi = 1200)
+ggsave("outputs/forpub/species_mig_timing_trend.png", height = 6.5, width = 7,
+       units = "in", dpi = 1200)
 
 
 
